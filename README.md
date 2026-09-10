@@ -4,6 +4,8 @@ A lightweight, dependency-free (Three.js only) 3D point cloud viewer and annotat
 
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.com/paypalme/SAMBITMOHAPATRA1206)
 
+![CloudView demo](assets/demo.gif)
+
 ## Features
 
 - Live viewer: creating a `CloudViewPy()` opens one browser tab per instance; every `add_point_cloud()` / `add_boxes()` / `select_box()` call updates that same tab in place, so you can stream frames straight from a loop.
