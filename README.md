@@ -47,6 +47,18 @@ To save a standalone, shareable snapshot instead of / in addition to the live vi
 viewer.export_html("frame_001.html")
 ```
 
+## Running on a remote server (SSH)
+
+`CloudViewPy`'s server always binds to `127.0.0.1` on whatever machine runs the script — if that's a remote server you're SSH'd into, the viewer isn't reachable from your local browser by default. `CloudViewPy` detects an SSH session automatically and, instead of trying (and failing) to open a browser on the remote machine, prints the exact command you need:
+
+```
+ssh -L <port>:127.0.0.1:<port> <user>@<remote-host>
+```
+
+Run that from your **local** machine (either reconnect with `-L`, or add the forward to an already-open session by pressing Enter then typing `~C` followed by the `-L ...` flag), then open the printed `http://127.0.0.1:<port>/` URL in your local browser.
+
+If you're using **VS Code Remote-SSH**, this is even simpler: it auto-forwards ports your script starts listening on and offers a one-click "Open in Browser" notification — no manual `ssh -L` needed.
+
 ## Support
 
 I built and maintain CloudView on my own time, and it's taken a lot of evenings and weekends to get it to where it is now. If it's useful to you, please consider supporting its development — donations go directly toward the time I spend adding user-requested features, fixing bugs, and keeping it maintained.

@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import socket
 import threading
 import time
 import webbrowser
@@ -133,7 +134,11 @@ class CloudViewPy:
                            add_point_cloud()/add_boxes() and then exits shortly after can race the
                            browser: opening a tab, loading Three.js, and connecting all take real
                            time, and if the script (and its server thread) is gone before that
-                           finishes, the earliest calls are lost.
+                           finishes, the earliest calls are lost. If an SSH session is detected
+                           (the script is running on a remote machine you're connected to), this
+                           skips actually opening a browser -- that would open one on the remote
+                           machine, not yours -- and instead prints the SSH port-forward command
+                           needed to reach the viewer from your local machine; see README.
         :param template_path: Path to the viewer's HTML template. Defaults to 'cloud_view.html'
                                in the same directory as this script.
         :param connect_timeout: Max seconds to wait for the browser tab to connect when
@@ -213,7 +218,28 @@ class CloudViewPy:
             self._started = True
 
         if self._auto_open:
-            webbrowser.open(self.url)
+            # Running over SSH: webbrowser.open() would try to open a browser on the REMOTE
+            # machine (headless, or just the wrong machine) instead of your local PC. Detect
+            # that (standard SSH session env vars) and skip it, printing a port-forward command
+            # instead -- the server itself keeps binding to 127.0.0.1 either way, so forwarding
+            # is the secure way to reach it, not opening the port to the network.
+            is_ssh_session = any(os.environ.get(v) for v in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"))
+
+            if is_ssh_session:
+                print(
+                    f"CloudViewPy: detected an SSH session, so not trying to open a browser here "
+                    f"(that would open on this remote machine, not yours).\n"
+                    f"On your LOCAL machine, forward this port and open the viewer there:\n\n"
+                    f"    ssh -L {self.port}:127.0.0.1:{self.port} <user>@{socket.gethostname()}\n\n"
+                    f"then open {self.url} in your local browser. If you're already connected "
+                    f"without -L, either reconnect with that flag, or add the forward to the open "
+                    f"session without disconnecting: press Enter, type '~C', then "
+                    f"'-L {self.port}:127.0.0.1:{self.port}'. VS Code's Remote-SSH extension "
+                    f"forwards listening ports automatically and offers to open this one for you."
+                )
+            else:
+                webbrowser.open(self.url)
+
             connected = self._client_connected.wait(timeout=self._connect_timeout)
             if not connected:
                 print(
