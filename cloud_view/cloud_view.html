@@ -1,0 +1,2998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Point Cloud Visualizer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      background: #181818;
+      color: #eeeeee;
+      user-select: none;
+    }
+
+    #app-layout {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #canvas-container {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 240px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #resizer {
+      flex: 0 0 6px;
+      width: 6px;
+      height: 100%;
+      background: #202020;
+      border-left: 1px solid #333;
+      border-right: 1px solid #333;
+      cursor: col-resize;
+      position: relative;
+      z-index: 20;
+    }
+
+    #resizer:hover, #resizer.resizing {
+      background: #00d2ff;
+    }
+
+    #app-layout.sidebar-collapsed #sidebar,
+    #app-layout.sidebar-collapsed #resizer {
+      display: none;
+    }
+
+    #panel-toggle-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 15;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(28, 28, 28, 0.92);
+      border: 1px solid #383838;
+      border-radius: 6px;
+      color: #00d2ff;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+
+    #panel-toggle-btn:hover {
+      border-color: #00d2ff;
+    }
+
+    #help-btn {
+      pointer-events: auto;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(28, 28, 28, 0.92);
+      border: 1px solid #00d2ff;
+      color: #00d2ff;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    #help-btn:hover {
+      background: #00d2ff;
+      color: #111;
+    }
+
+    #help-panel {
+      position: absolute;
+      top: 52px;
+      left: 15px;
+      z-index: 30;
+      width: 320px;
+      max-height: calc(100% - 70px);
+      overflow-y: auto;
+      background: rgba(20, 20, 20, 0.97);
+      border: 1px solid #383838;
+      border-radius: 8px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(6px);
+      pointer-events: auto;
+      font-size: 12px;
+      color: #ccc;
+    }
+
+    #help-panel[hidden] {
+      display: none;
+    }
+
+    #help-panel h3 {
+      font-size: 13px;
+      color: #00d2ff;
+      margin: 12px 0 6px;
+      text-shadow: 0 0 6px rgba(0, 210, 255, 0.3);
+    }
+
+    #help-panel h3:first-child {
+      margin-top: 0;
+    }
+
+    #help-panel .help-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 3px 0;
+      line-height: 1.4;
+    }
+
+    #help-panel .help-key {
+      color: #ffaa00;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    #help-panel .help-desc {
+      text-align: right;
+      color: #ccc;
+    }
+
+    #help-panel-close {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    #help-panel-close:hover {
+      color: #fff;
+    }
+
+    #sidebar {
+      position: relative;
+      flex: 0 0 320px;
+      width: 320px;
+      min-width: 260px;
+      max-width: 70vw;
+      height: 100%;
+      overflow-y: auto;
+      box-sizing: border-box;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #1a1a1a;
+    }
+
+    #sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+    #sidebar::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+
+    .card {
+      background: rgba(28, 28, 28, 0.92);
+      border: 1px solid #383838;
+      border-radius: 6px;
+      padding: 10px 12px;
+      backdrop-filter: blur(4px);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .card-title {
+      font-weight: 600;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #00d2ff;
+    }
+
+    .card-body {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .collapsed {
+      display: none !important;
+    }
+
+    .action-btn {
+      background: #252525;
+      border: 1px solid #00d2ff;
+      color: #00d2ff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .action-btn:hover {
+      background: #00d2ff;
+      color: #111;
+    }
+
+    .action-btn.active {
+      background: #00d2ff;
+      color: #000;
+    }
+
+    .action-btn.export-btn {
+      border-color: #00ffcc;
+      color: #00ffcc;
+      margin-top: 4px;
+    }
+
+    .action-btn.export-btn:hover {
+      background: #00ffcc;
+      color: #000;
+    }
+
+    .box-dim-group {
+      display: flex;
+      gap: 4px;
+    }
+
+    .export-group {
+      margin-top: 4px;
+      border-top: 1px dashed #444;
+      padding-top: 8px;
+    }
+
+    .sub-axis-btn {
+      flex: 1;
+      background: #2b2b2b;
+      border: 1px solid #555;
+      color: #ccc;
+      padding: 5px;
+      font-size: 10px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .sub-axis-btn:hover {
+      border-color: #ffaa00;
+      color: #fff;
+    }
+
+    .sub-axis-btn.active {
+      background: #ffaa00;
+      color: #000;
+      font-weight: bold;
+      border-color: #ffaa00;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+    }
+
+    .control-group label {
+      color: #aaa;
+    }
+
+    .measure-result {
+      margin-top: 8px;
+      border-top: 1px dashed #444;
+      padding-top: 8px;
+    }
+
+    .measure-row {
+      display: flex;
+      justify-content: space-between;
+      color: #ccc;
+      font-family: monospace;
+    }
+
+    .measure-row span {
+      color: #00ffcc;
+    }
+
+    .measure-total {
+      border-top: 1px solid #333;
+      margin-top: 4px;
+      padding-top: 4px;
+      font-weight: 600;
+    }
+
+    select, input[type="text"], input[type="number"], input[type="range"] {
+      background: #222;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 4px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: #00d2ff;
+    }
+
+    .offset-inputs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .offset-inputs div {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+    }
+
+    .offset-inputs span {
+      font-size: 10px;
+      color: #888;
+    }
+
+    .offset-inputs input {
+      width: 100%;
+    }
+
+    .eye-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .hidden-layer {
+      opacity: 0.3;
+    }
+
+    .box-list-container {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 240px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 3px;
+    }
+
+    .box-list-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .box-list-container::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+
+    .point-cloud-list-container {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 320px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 3px;
+    }
+
+    .point-cloud-list-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .point-cloud-list-container::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+
+    .pc-card-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    .box-card {
+      background: #222;
+      border-radius: 4px;
+      border: 1px solid #383838;
+      font-size: 11px;
+      color: #bbb;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .box-card.selected-box-card {
+      border-color: #00ffcc;
+    }
+
+    .box-card-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 7px;
+      cursor: pointer;
+    }
+
+    .box-card-header:hover {
+      background: #2d2d2d;
+    }
+
+    .selected-box-card .box-card-header {
+      background: #0f3333;
+      color: #ffffff;
+    }
+
+    .box-card-title {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .box-card-title .uid-part {
+      flex-shrink: 0;
+      font-family: monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: #00d2ff;
+    }
+
+    .box-card-title .sep {
+      flex-shrink: 0;
+      color: #555;
+    }
+
+    .box-card-title .label-part {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .box-card-arrow {
+      flex-shrink: 0;
+      font-size: 9px;
+      color: #888;
+    }
+
+    .box-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 7px 7px 8px 7px;
+      border-top: 1px solid #333;
+    }
+
+    .box-card-body.collapsed {
+      display: none;
+    }
+
+    .box-card-body .control-group {
+      gap: 3px;
+    }
+
+    .box-card-body .control-group label {
+      font-size: 10px;
+    }
+
+    .glow-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .bulb-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      opacity: 1;
+      filter: none;
+      transition: all 0.15s ease;
+    }
+
+    .bulb-btn.bulb-off {
+      opacity: 0.3;
+      filter: grayscale(1);
+    }
+
+    .bulb-btn:hover {
+      transform: scale(1.15);
+    }
+
+    .box-label-input {
+      width: 100%;
+      padding: 4px 6px;
+      font-size: 11px;
+      background: #111;
+      border: 1px solid #555;
+      color: #00ffcc;
+      border-radius: 3px;
+    }
+
+    .assign-label-btn {
+      border-color: #ffaa00;
+      color: #ffaa00;
+      margin-top: 2px;
+    }
+
+    .assign-label-btn:hover {
+      background: #ffaa00;
+      color: #000;
+    }
+
+    .color-arrow-btn {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      background: #111;
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 3px 5px;
+      cursor: pointer;
+    }
+
+    .color-arrow-btn .swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+    }
+
+    .color-arrow-btn .arrow {
+      font-size: 9px;
+      color: #999;
+      line-height: 1;
+    }
+
+    .color-arrow-btn:hover {
+      border-color: #888;
+    }
+
+    .color-dropdown {
+      position: fixed;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      background: #1c1c1c;
+      border: 1px solid #444;
+      border-radius: 5px;
+      padding: 6px;
+      z-index: 1000;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    }
+
+    .color-swatch-option {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 2px solid transparent;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .color-swatch-option.selected {
+      border-color: #fff;
+    }
+
+    .color-swatch-option:hover {
+      transform: scale(1.15);
+    }
+
+    .delete-box-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .delete-box-btn:hover {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+
+    #info-box {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      max-width: calc(100% - 30px);
+      background: rgba(20, 20, 20, 0.85);
+      border: 1px solid #383838;
+      padding: 8px 14px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #00ffcc;
+      z-index: 10;
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    #axes-container {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 120px;
+      height: 120px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #branding {
+      position: absolute;
+      top: 10px;
+      left: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #branding .brand-logo {
+      width: 34px;
+      height: 34px;
+      flex-shrink: 0;
+    }
+
+    #branding .brand-name {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #00d2ff;
+      text-shadow: 0 0 8px rgba(0, 210, 255, 0.35);
+    }
+  </style>
+
+  <!-- External Three.js Core & OrbitControls Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <div id="app-layout">
+    <div id="canvas-container">
+      <div id="branding">
+        <svg class="brand-logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(-6,-4) scale(0.85)" opacity="0.5">
+            <path fill="#00d2ff" d="M18,44 C10,44 4,38 4,30 C4,23 9,17 16,16 C18,9 25,4 33,4 C42,4 50,10 52,19 C58,20 62,25 62,31 C62,38 56,44 49,44 Z"/>
+          </g>
+          <g transform="translate(6,6) scale(0.85)">
+            <path fill="#00d2ff" d="M18,44 C10,44 4,38 4,30 C4,23 9,17 16,16 C18,9 25,4 33,4 C42,4 50,10 52,19 C58,20 62,25 62,31 C62,38 56,44 49,44 Z"/>
+          </g>
+        </svg>
+        <span class="brand-name">CloudView</span>
+        <button id="help-btn" title="Controls &amp; shortcuts">?</button>
+      </div>
+      <div id="help-panel" hidden>
+        <button id="help-panel-close" title="Close">✕</button>
+        <h3>🖱️ Camera</h3>
+        <div class="help-row"><span class="help-key">Left-drag</span><span class="help-desc">Orbit / rotate view</span></div>
+        <div class="help-row"><span class="help-key">Right-drag</span><span class="help-desc">Pan</span></div>
+        <div class="help-row"><span class="help-key">Middle-drag / Scroll</span><span class="help-desc">Zoom</span></div>
+
+        <h3>🎯 Points</h3>
+        <div class="help-row"><span class="help-key">Click a point</span><span class="help-desc">Inspect XYZ + all features</span></div>
+
+        <h3>📦 Bounding Boxes</h3>
+        <div class="help-row"><span class="help-key">Double-click a box</span><span class="help-desc">Enter/exit edit mode</span></div>
+        <div class="help-row"><span class="help-key">Middle-drag (edit mode)</span><span class="help-desc">Move box</span></div>
+        <div class="help-row"><span class="help-key">Left-drag (edit mode)</span><span class="help-desc">Rotate box</span></div>
+        <div class="help-row"><span class="help-key">Right-drag (edit mode)</span><span class="help-desc">Scale box (pick L/W/H first)</span></div>
+        <div class="help-row"><span class="help-key">💡 bulb icon</span><span class="help-desc">Toggle glow for that box</span></div>
+        <div class="help-row"><span class="help-key">👁️ eye icons</span><span class="help-desc">Show/hide a layer, or all at once</span></div>
+
+        <h3>📏 Scale / Measure</h3>
+        <div class="help-row"><span class="help-key">Start Measuring</span><span class="help-desc">Click a start point, then an end point</span></div>
+
+        <h3>🧭 Ego Poses</h3>
+        <div class="help-row"><span class="help-key">Axis triads</span><span class="help-desc">Red=X, Green=Y, Blue=Z per pose</span></div>
+      </div>
+      <div id="info-box">Click a point to inspect | Double-click a box to edit it</div>
+      <div id="axes-container"></div>
+      <button id="panel-toggle-btn" title="Collapse panel">☰</button>
+    </div>
+    <div id="resizer" title="Drag to resize"></div>
+    <div id="sidebar"></div>
+  </div>
+
+  <script>
+    // Placeholder injected by Python script for a static/offline export (export_html()):
+    // {{POINT_CLOUD_DATA_PAYLOAD}}
+    // Each entry: { name, n, k, initialCol, initialPointSize, dataB64 }, where dataB64 is a
+    // base64-encoded Float32Array of n*k values (row-major: point i, channel k -> i*k_+k).
+    // Left null when the page is served live by CloudViewPy's local server (see connectLiveServer
+    // below) — in that mode the same data arrives incrementally over Server-Sent Events instead.
+    let pointCloudDataList = null;
+
+    // Placeholder injected by Python script for a static/offline export: {{BOX_DATA_PAYLOAD}}
+    // Each entry: { id, label, x, y, z, l, w, h, rx, ry, rz, glowColor }. Rotations in radians,
+    // about the box's local X (rx/roll), Y (ry/pitch), Z (rz/yaw) axes — same convention the
+    // exported *_box_labels.csv uses.
+    let initialBoxDataList = null;
+
+    // Placeholder injected by Python script for a static/offline export: {{EGO_POSE_DATA_PAYLOAD}}
+    // A list of { n, matricesB64, names, axisLength } chunks, applied in order (mirrors however
+    // many add_ego_poses() calls were made) — matricesB64 is a base64 Float32Array of n*16
+    // values, one row-major 4x4 vehicle-to-world matrix per pose.
+    let egoPoseDataList = null;
+
+    // Custom Sprite Textures
+    function createCircleTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.arc(32, 32, 28, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createSphereTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      const grad = ctx.createRadialGradient(24, 24, 2, 32, 32, 30);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.7, '#888888');
+      grad.addColorStop(1, '#000000');
+      ctx.beginPath();
+      ctx.arc(32, 32, 30, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    const circleMap = createCircleTexture();
+    const sphereMap = createSphereTexture();
+
+    // Scene & Viewport Setup
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x181818);
+    // Points filtered out of a layer's Min/Max range are recolored to blend into this, rather
+    // than being removed/hidden, so they read as "gone" without disturbing point count/indices.
+    const FILTER_HIDE_RGB = [scene.background.r, scene.background.g, scene.background.b];
+
+    THREE.Object3D.DefaultUp.set(0, 0, 1);
+
+    const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(-6, 6, 5);
+
+    // preserveDrawingBuffer keeps the last-rendered frame in the canvas's backbuffer instead of
+    // discarding it right after compositing — without it, some external screenshot/screen-recording
+    // tools (which grab the canvas outside the browser's own paint cycle) capture a blank frame.
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(4, 0, 0);
+
+    const highlightGeo = new THREE.SphereGeometry(0.12, 16, 16);
+    const highlightMat = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false
+    });
+    const highlightMesh = new THREE.Mesh(highlightGeo, highlightMat);
+    highlightMesh.visible = false;
+    scene.add(highlightMesh);
+
+    // Measure Tool: two picked-point markers plus an arrow drawn between them.
+    const measureMarkerGeo = new THREE.SphereGeometry(0.1, 16, 16);
+    const measureStartMesh = new THREE.Mesh(measureMarkerGeo, new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.6, depthWrite: false }));
+    const measureEndMesh = new THREE.Mesh(measureMarkerGeo, new THREE.MeshBasicMaterial({ color: 0xff3388, transparent: true, opacity: 0.6, depthWrite: false }));
+    measureStartMesh.visible = false;
+    measureEndMesh.visible = false;
+    scene.add(measureStartMesh, measureEndMesh);
+    let measureArrow = null;
+
+    function clearMeasureArrow() {
+      if (measureArrow) {
+        scene.remove(measureArrow);
+        measureArrow = null;
+      }
+    }
+
+    function drawMeasureArrow(p1, p2) {
+      clearMeasureArrow();
+      const offset = new THREE.Vector3().subVectors(p2, p1);
+      const length = offset.length();
+      if (length < 1e-6) return;
+      const dir = offset.clone().normalize();
+      const headLength = Math.min(0.3, length * 0.25);
+      const headWidth = Math.min(0.15, length * 0.15);
+      measureArrow = new THREE.ArrowHelper(dir, p1, length, 0xffcc00, headLength, headWidth);
+      scene.add(measureArrow);
+    }
+
+    const pointCloudLayers = {};
+
+    // Multi-Bounding Box System State
+    let boxes = [];
+    let activeBoxId = null;
+    let nextBoxId = 1;
+
+    let isBoxEditMode = false;
+    let isMeasureMode = false;
+    let measureStartPoint = null;
+    let activeSizeAxis = null;
+    let isDraggingBox = false;
+    let dragMode = null;
+    let selectedFaceNormal = new THREE.Vector3();
+
+    // While a box is actively being dragged, glow highlighting is paused entirely (rather than
+    // recomputed on every pointermove) so dragging stays smooth on large point clouds. Re-enabled
+    // for whichever boxes had it on once the drag ends.
+    let glowSuspendedForDrag = false;
+
+    const GLOW_COLORS = [
+      { name: 'Orange', hex: '#ff8800' },
+      { name: 'Yellow', hex: '#ffe600' },
+      { name: 'Magenta', hex: '#ff00ff' },
+      { name: 'Cyan', hex: '#00e5ff' },
+      { name: 'Red', hex: '#ff3333' },
+      { name: 'Green', hex: '#33ff33' },
+      { name: 'Rainbow', hex: 'rainbow' }
+    ];
+
+    // 'rainbow' is a sentinel glowColor value (not a real hex) that switches a box's glow into
+    // the animated liquid-glass rainbow shimmer instead of a single pulsing color — see its use
+    // in the animate() render loop. Swatches showing it use this gradient in place of a flat color.
+    const RAINBOW_SWATCH_CSS = 'conic-gradient(from 0deg, #ff3333, #ff8800, #ffe600, #33ff33, #00e5ff, #6644ff, #ff00ff, #ff3333)';
+    function swatchCss(hex) {
+      return hex === 'rainbow' ? RAINBOW_SWATCH_CSS : hex;
+    }
+
+    // List of { boxId, byLayer: { layerName: [indices] } } — one entry per box that currently has glow enabled.
+    let boxGlowSelections = [];
+
+    // Small color-swatch popover used by the per-box glow color picker.
+    let colorPopoverEl = null;
+
+    function closeColorPopover() {
+      if (colorPopoverEl) {
+        colorPopoverEl.remove();
+        colorPopoverEl = null;
+      }
+    }
+
+    function openColorPopover(anchorEl, currentHex, onPick) {
+      closeColorPopover();
+
+      const rect = anchorEl.getBoundingClientRect();
+      const panel = document.createElement('div');
+      panel.className = 'color-dropdown';
+      panel.style.top = `${rect.bottom + 4}px`;
+      panel.style.left = `${rect.left}px`;
+      panel.onclick = (e) => e.stopPropagation();
+
+      GLOW_COLORS.forEach(c => {
+        const opt = document.createElement('button');
+        opt.type = 'button';
+        opt.className = `color-swatch-option ${c.hex === currentHex ? 'selected' : ''}`;
+        opt.style.background = swatchCss(c.hex);
+        opt.title = c.name;
+        opt.onclick = (e) => {
+          e.stopPropagation();
+          onPick(c.hex);
+          closeColorPopover();
+        };
+        panel.appendChild(opt);
+      });
+
+      document.body.appendChild(panel);
+      colorPopoverEl = panel;
+    }
+
+    document.addEventListener('click', () => closeColorPopover());
+
+    // In-viewport "<id> | <label>" tag anchored to a box's top corner.
+    const BOX_LABEL_WORLD_HEIGHT = 0.24;
+
+    function makeBoxLabelCanvas(text) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const fontSize = 18;
+      const paddingX = 9, paddingY = 5;
+
+      ctx.font = `bold ${fontSize}px monospace`;
+      const textWidth = ctx.measureText(text).width;
+      canvas.width = Math.ceil(textWidth + paddingX * 2);
+      canvas.height = fontSize + paddingY * 2;
+
+      // Re-apply font/state: resizing a canvas resets its 2D context.
+      ctx.font = `bold ${fontSize}px monospace`;
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.8)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#00d2ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+      ctx.fillStyle = '#00e5ff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, paddingX, canvas.height / 2 + 1);
+
+      return canvas;
+    }
+
+    function createBoxLabelSprite(text) {
+      const canvas = makeBoxLabelCanvas(text);
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, transparent: true });
+      const sprite = new THREE.Sprite(material);
+      sprite.renderOrder = 999;
+      sprite.scale.set(BOX_LABEL_WORLD_HEIGHT * (canvas.width / canvas.height), BOX_LABEL_WORLD_HEIGHT, 1);
+      return sprite;
+    }
+
+    function refreshBoxLabelSprite(box) {
+      const canvas = makeBoxLabelCanvas(`${box.id} | ${box.label}`);
+      box.labelSprite.material.map.dispose();
+      box.labelSprite.material.map = new THREE.CanvasTexture(canvas);
+      box.labelSprite.material.needsUpdate = true;
+      box.labelSprite.scale.set(BOX_LABEL_WORLD_HEIGHT * (canvas.width / canvas.height), BOX_LABEL_WORLD_HEIGHT, 1);
+    }
+
+    // Keeps every box's floating tag pinned to whichever of its 8 corners currently reads as
+    // "top-right" on screen: highest in world-up (Z) first, then furthest along the camera's
+    // right vector. Re-picked every frame so it stays correct through translate/rotate/scale.
+    const BOX_LABEL_CORNERS = [
+      [-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5],
+      [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+    ];
+    const labelCamRight = new THREE.Vector3();
+    const labelCamUp = new THREE.Vector3();
+    const labelCamFwd = new THREE.Vector3();
+    const labelCorner = new THREE.Vector3();
+    const labelBestCorner = new THREE.Vector3();
+
+    function updateBoxLabelPositions() {
+      camera.updateMatrixWorld();
+      camera.matrixWorld.extractBasis(labelCamRight, labelCamUp, labelCamFwd);
+
+      boxes.forEach(b => {
+        if (!b.labelSprite) return;
+
+        let bestScore = -Infinity;
+        for (const c of BOX_LABEL_CORNERS) {
+          labelCorner.set(c[0], c[1], c[2]).applyMatrix4(b.group.matrixWorld);
+          const score = labelCorner.z * 3 + labelCorner.dot(labelCamRight);
+          if (score > bestScore) {
+            bestScore = score;
+            labelBestCorner.copy(labelCorner);
+          }
+        }
+        b.labelSprite.position.copy(labelBestCorner);
+      });
+    }
+
+    // Yaw (about world-up Z) / Pitch (Y) / Roll (X) <-> quaternion, for the per-box transform fields.
+    const RAD2DEG = 180 / Math.PI;
+    const DEG2RAD = Math.PI / 180;
+
+    function quaternionToYPR(quat) {
+      const euler = new THREE.Euler().setFromQuaternion(quat, 'ZYX');
+      return { yaw: euler.z * RAD2DEG, pitch: euler.y * RAD2DEG, roll: euler.x * RAD2DEG };
+    }
+
+    function yprToQuaternion(yawDeg, pitchDeg, rollDeg) {
+      const euler = new THREE.Euler(rollDeg * DEG2RAD, pitchDeg * DEG2RAD, yawDeg * DEG2RAD, 'ZYX');
+      return new THREE.Quaternion().setFromEuler(euler);
+    }
+
+    // Pushes a box's current position/quaternion into its (already-built) sidebar transform fields.
+    function syncTransformInputs(box) {
+      const t = box.transformInputs;
+      if (!t) return;
+      const p = box.group.position;
+      const ypr = quaternionToYPR(box.group.quaternion);
+
+      t.x.value = p.x.toFixed(2);
+      t.y.value = p.y.toFixed(2);
+      t.z.value = p.z.toFixed(2);
+      t.yaw.value = ypr.yaw.toFixed(1);
+      t.pitch.value = ypr.pitch.toFixed(1);
+      t.roll.value = ypr.roll.toFixed(1);
+    }
+
+    const dragPlane = new THREE.Plane();
+    const planeIntersect = new THREE.Vector3();
+    const prevMousePos = new THREE.Vector2();
+
+    // options: { position: THREE.Vector3, label: string, id: number, scale: THREE.Vector3,
+    //            quaternion: THREE.Quaternion, glowColor: hex string, makeActive: bool }
+    // `id` lets callers (e.g. boxes injected from Python) assign a specific uid instead of
+    // auto-incrementing; nextBoxId is bumped past it so later "Add New Box" clicks never collide.
+    function createBoundingBox(options = {}) {
+      const {
+        position = new THREE.Vector3(4, 0, 1.5),
+        label: defaultLabel = null,
+        id: explicitId = null,
+        scale = new THREE.Vector3(3, 3, 3),
+        quaternion = null,
+        glowColor = null,
+        makeActive = true
+      } = options;
+
+      const id = explicitId !== null ? explicitId : nextBoxId++;
+      if (explicitId !== null && explicitId >= nextBoxId) nextBoxId = explicitId + 1;
+
+      // Explicit ids must be idempotent: if a box with this id already exists (e.g. the
+      // auto-created fallback default box happened to land on the same id a moment before a real
+      // add_boxes() call arrives), replace it instead of creating a silent duplicate with a
+      // colliding id.
+      if (explicitId !== null && boxes.some(b => b.id === explicitId)) {
+        deleteBox(explicitId);
+      }
+
+      const group = new THREE.Group();
+      group.position.copy(position);
+      if (quaternion) group.quaternion.copy(quaternion);
+
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const wireGeo = new THREE.EdgesGeometry(geo);
+      const wireMat = new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 2 });
+      const wireframe = new THREE.LineSegments(wireGeo, wireMat);
+
+      const faceMat = new THREE.MeshBasicMaterial({
+        color: 0x00d2ff,
+        transparent: true,
+        opacity: 0.06,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const facesMesh = new THREE.Mesh(geo, faceMat);
+
+      group.add(wireframe);
+      group.add(facesMesh);
+      group.scale.copy(scale);
+
+      scene.add(group);
+
+      const label = defaultLabel || `Box_${id}`;
+      const labelSprite = createBoxLabelSprite(`${id} | ${label}`);
+      scene.add(labelSprite);
+
+      const boxData = {
+        id, label, group, wireframe, facesMesh, wireMat, faceMat, labelSprite,
+        glowEnabled: true,
+        glowColor: glowColor || GLOW_COLORS[(id - 1) % GLOW_COLORS.length].hex,
+        expanded: true
+      };
+      boxes.push(boxData);
+      group.updateMatrixWorld(true);
+      updateBoxLabelPositions();
+      if (makeActive) setActiveBox(id);
+      renderBoxCardList();
+      computeAllGlowSelections();
+
+      return boxData;
+    }
+
+    // Builds boxes from the Python-injected payload: [{ id, label, x, y, z, l, w, h, rx, ry, rz, glowColor }, ...]
+    function loadInitialBoxes(specs) {
+      specs.forEach((spec, idx) => {
+        const euler = new THREE.Euler(spec.rx || 0, spec.ry || 0, spec.rz || 0, 'ZYX');
+        const quaternion = new THREE.Quaternion().setFromEuler(euler);
+
+        createBoundingBox({
+          id: spec.id,
+          label: spec.label,
+          position: new THREE.Vector3(spec.x || 0, spec.y || 0, spec.z || 0),
+          scale: new THREE.Vector3(spec.l || 1, spec.w || 1, spec.h || 1),
+          quaternion,
+          glowColor: spec.glowColor || null,
+          makeActive: idx === specs.length - 1
+        });
+      });
+    }
+
+    function getActiveBox() {
+      return boxes.find(b => b.id === activeBoxId) || null;
+    }
+
+    // A hidden box must be fully inert: not raycastable, not selectable, not draggable.
+    function getRaycastableBoxFaceMeshes() {
+      return boxes.filter(b => b.group.visible).map(b => b.facesMesh);
+    }
+
+    function setActiveBox(id) {
+      activeBoxId = id;
+      boxes.forEach(b => {
+        if (b.id === activeBoxId) {
+          b.wireMat.color.setHex(0x00ffcc);
+          b.faceMat.opacity = 0.12;
+        } else {
+          b.wireMat.color.setHex(0x5588aa);
+          b.faceMat.opacity = 0.03;
+        }
+      });
+      updateBoxUIState();
+
+      const activeB = getActiveBox();
+      if (activeB && !isBoxEditMode) {
+        document.getElementById('info-box').innerText = `${activeB.label}: ${countPointsInBox(activeB)} point(s) inside${activeB.glowEnabled ? '' : ' (glow disabled)'}`;
+      }
+    }
+
+    function deleteBox(id) {
+      const idx = boxes.findIndex(b => b.id === id);
+      if (idx !== -1) {
+        const b = boxes[idx];
+        scene.remove(b.group);
+        b.wireframe.geometry.dispose();
+        b.wireMat.dispose();
+        b.facesMesh.geometry.dispose();
+        b.faceMat.dispose();
+
+        scene.remove(b.labelSprite);
+        b.labelSprite.material.map.dispose();
+        b.labelSprite.material.dispose();
+
+        boxes.splice(idx, 1);
+
+        if (activeBoxId === id) {
+          activeBoxId = boxes.length > 0 ? boxes[boxes.length - 1].id : null;
+        }
+
+        if (boxes.length === 0) {
+          if (isBoxEditMode) toggleBoxEditMode();
+        } else {
+          setActiveBox(activeBoxId);
+        }
+
+        renderBoxCardList();
+        computeAllGlowSelections();
+      }
+    }
+
+    function toggleBoxEditMode() {
+      if (boxes.length === 0 && !isBoxEditMode) createBoundingBox();
+
+      isBoxEditMode = !isBoxEditMode;
+
+      if (isBoxEditMode) {
+        controls.enabled = false;
+        document.getElementById('info-box').innerText = "Box Mode Active: Middle Drag = Move | Left Drag = Rotate | Right Drag = Scale";
+      } else {
+        controls.enabled = true;
+        document.getElementById('info-box').innerText = "Click a point to inspect | Double-click a box to edit it";
+      }
+    }
+
+    function selectSizeAxis(axisName) {
+      if (!isBoxEditMode) toggleBoxEditMode();
+
+      activeSizeAxis = activeSizeAxis === axisName ? null : axisName;
+
+      ['length', 'width', 'height'].forEach(ax => {
+        const btn = document.getElementById(`btn-dim-${ax}`);
+        if (btn) btn.classList.toggle('active', ax === activeSizeAxis);
+      });
+
+      if (activeSizeAxis) {
+        document.getElementById('info-box').innerText = `Scaling [${activeSizeAxis.toUpperCase()}]: Click & Drag Up/Down on active box.`;
+      } else {
+        document.getElementById('info-box').innerText = "Box Mode Active: Middle Drag = Move | Left Drag = Rotate | Right Drag = Scale";
+      }
+    }
+
+    // Counts how many points currently fall inside a given box (used only for info-box feedback).
+    function countPointsInBox(box) {
+      box.group.updateMatrixWorld(true);
+      const invMatrix = new THREE.Matrix4().copy(box.group.matrixWorld).invert();
+      const localPt = new THREE.Vector3();
+      let total = 0;
+
+      for (const layer of Object.values(pointCloudLayers)) {
+        if (!layer.mesh.visible) continue;
+        const positions = layer.mesh.geometry.attributes.position.array;
+        const hidden = layer.filterHidden;
+        for (let i = 0; i < layer.N; i++) {
+          if (hidden && hidden[i]) continue;
+          localPt.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]).applyMatrix4(invMatrix);
+          if (Math.abs(localPt.x) <= 0.5 && Math.abs(localPt.y) <= 0.5 && Math.abs(localPt.z) <= 0.5) total++;
+        }
+      }
+      return total;
+    }
+
+    // Commits box.label to every point currently inside it, by writing the box's uid into that
+    // point's persistent pointBoxAssignment slot. This is the ONLY thing that changes a point's
+    // label — dragging/rotating/scaling a box (or the live glow highlight) never touches it, so
+    // moving a box around never silently relabels points that were already assigned.
+    function assignLabelForBox(box) {
+      box.group.updateMatrixWorld(true);
+      const invMatrix = new THREE.Matrix4().copy(box.group.matrixWorld).invert();
+      const localPt = new THREE.Vector3();
+      let count = 0;
+
+      for (const layer of Object.values(pointCloudLayers)) {
+        if (!layer.mesh.visible) continue;
+        const positions = layer.mesh.geometry.attributes.position.array;
+        const hidden = layer.filterHidden;
+        for (let i = 0; i < layer.N; i++) {
+          if (hidden && hidden[i]) continue;
+          localPt.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]).applyMatrix4(invMatrix);
+          if (Math.abs(localPt.x) <= 0.5 && Math.abs(localPt.y) <= 0.5 && Math.abs(localPt.z) <= 0.5) {
+            layer.pointBoxAssignment[i] = box.id;
+            count++;
+          }
+        }
+      }
+
+      document.getElementById('info-box').innerText = `🏷️ Assigned "${box.label}" to ${count} point(s)`;
+    }
+
+    // Recomputes, for every box with glow enabled, which points fall inside it.
+    // A point that falls inside more than one enabled box is only assigned to the first (by creation order).
+    // Result: boxGlowSelections = [{ boxId, byLayer: { layerName: [indices] } }, ...]
+    function computeAllGlowSelections() {
+      for (const name of Object.keys(pointCloudLayers)) restoreBaseColors(name);
+      boxGlowSelections = [];
+
+      const enabledBoxes = boxes.filter(b => b.glowEnabled);
+      if (enabledBoxes.length === 0) return;
+
+      const invMatrices = enabledBoxes.map(b => {
+        b.group.updateMatrixWorld(true);
+        return new THREE.Matrix4().copy(b.group.matrixWorld).invert();
+      });
+      const localPt = new THREE.Vector3();
+      const entriesByBoxId = {};
+
+      for (const [name, layer] of Object.entries(pointCloudLayers)) {
+        if (!layer.mesh.visible) continue;
+
+        const positions = layer.mesh.geometry.attributes.position.array;
+        const hidden = layer.filterHidden;
+        const perBoxIndices = enabledBoxes.map(() => []);
+
+        for (let i = 0; i < layer.N; i++) {
+          if (hidden && hidden[i]) continue;
+          const px = positions[i * 3 + 0];
+          const py = positions[i * 3 + 1];
+          const pz = positions[i * 3 + 2];
+
+          for (let bIdx = 0; bIdx < enabledBoxes.length; bIdx++) {
+            localPt.set(px, py, pz).applyMatrix4(invMatrices[bIdx]);
+            if (Math.abs(localPt.x) <= 0.5 && Math.abs(localPt.y) <= 0.5 && Math.abs(localPt.z) <= 0.5) {
+              perBoxIndices[bIdx].push(i);
+              break;
+            }
+          }
+        }
+
+        perBoxIndices.forEach((indices, bIdx) => {
+          if (indices.length === 0) return;
+          const box = enabledBoxes[bIdx];
+          if (!entriesByBoxId[box.id]) {
+            entriesByBoxId[box.id] = { boxId: box.id, byLayer: {} };
+            boxGlowSelections.push(entriesByBoxId[box.id]);
+          }
+          entriesByBoxId[box.id].byLayer[name] = indices;
+        });
+      }
+    }
+
+    // Repaints every point back to its base (unglowed) color: the channel-mapped color, except
+    // points currently outside the Min/Max filter range, which get the background-blend color
+    // instead. This is the source of truth restored before glow overlays are reapplied.
+    function restoreBaseColors(layerName) {
+      const layer = pointCloudLayers[layerName];
+      if (!layer) return;
+      const colors = layer.mesh.geometry.attributes.color.array;
+      const orig = layer.originalColors;
+      const hidden = layer.filterHidden;
+      if (!hidden) {
+        for (let i = 0; i < orig.length; i++) colors[i] = orig[i];
+      } else {
+        for (let i = 0; i < layer.N; i++) {
+          const i3 = i * 3;
+          if (hidden[i]) {
+            colors[i3 + 0] = FILTER_HIDE_RGB[0];
+            colors[i3 + 1] = FILTER_HIDE_RGB[1];
+            colors[i3 + 2] = FILTER_HIDE_RGB[2];
+          } else {
+            colors[i3 + 0] = orig[i3 + 0];
+            colors[i3 + 1] = orig[i3 + 1];
+            colors[i3 + 2] = orig[i3 + 2];
+          }
+        }
+      }
+      layer.mesh.geometry.attributes.color.needsUpdate = true;
+    }
+
+    function updateBoxUIState() {
+      const container = document.getElementById('box-list-container');
+      if (!container) return;
+      container.querySelectorAll('.box-card').forEach(el => {
+        const bId = parseInt(el.getAttribute('data-box-id'));
+        el.classList.toggle('selected-box-card', bId === activeBoxId);
+      });
+    }
+
+    // Each box is rendered as its own collapsible accordion card, holding its
+    // ID, editable label (used as the class label for points inside it), and glow settings.
+    function renderBoxCardList() {
+      const container = document.getElementById('box-list-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      boxes.forEach(b => {
+        const card = document.createElement('div');
+        card.className = `box-card ${b.id === activeBoxId ? 'selected-box-card' : ''} ${b.group.visible ? '' : 'hidden-layer'}`;
+        card.setAttribute('data-box-id', b.id);
+
+        // --- Header: arrow, "<uid> | <label>" title, delete ---
+        const header = document.createElement('div');
+        header.className = 'box-card-header';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'box-card-arrow';
+        arrow.textContent = b.expanded ? '▼' : '▶';
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'box-card-title';
+
+        const uidPart = document.createElement('span');
+        uidPart.className = 'uid-part';
+        uidPart.textContent = b.id;
+
+        const sep = document.createElement('span');
+        sep.className = 'sep';
+        sep.textContent = '|';
+
+        const labelPart = document.createElement('span');
+        labelPart.className = 'label-part';
+        labelPart.textContent = b.label;
+
+        titleSpan.appendChild(uidPart);
+        titleSpan.appendChild(sep);
+        titleSpan.appendChild(labelPart);
+
+        const visBtn = document.createElement('button');
+        visBtn.className = 'eye-btn';
+        visBtn.innerHTML = b.group.visible ? '👁️' : '👁️‍🗨️';
+        visBtn.title = b.group.visible ? 'Hide this box' : 'Show this box';
+        visBtn.onclick = (e) => {
+          e.stopPropagation();
+          const nowVisible = !b.group.visible;
+          b.group.visible = nowVisible;
+          b.labelSprite.visible = nowVisible;
+          visBtn.innerHTML = nowVisible ? '👁️' : '👁️‍🗨️';
+          visBtn.title = nowVisible ? 'Hide this box' : 'Show this box';
+          card.classList.toggle('hidden-layer', !nowVisible);
+        };
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-box-btn';
+        delBtn.innerHTML = '🗑️';
+        delBtn.title = 'Delete Box';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteBox(b.id);
+        };
+
+        header.appendChild(arrow);
+        header.appendChild(titleSpan);
+        header.appendChild(visBtn);
+        header.appendChild(delBtn);
+
+        header.onclick = () => {
+          setActiveBox(b.id);
+          b.expanded = !b.expanded;
+          arrow.textContent = b.expanded ? '▼' : '▶';
+          body.classList.toggle('collapsed', !b.expanded);
+          if (b.expanded) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        };
+
+        // --- Body: label input, glow controls ---
+        const body = document.createElement('div');
+        body.className = `box-card-body ${b.expanded ? '' : 'collapsed'}`;
+
+        const labelGroup = document.createElement('div');
+        labelGroup.className = 'control-group';
+        const labelTag = document.createElement('label');
+        labelTag.textContent = 'Label (class name for points):';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'box-label-input';
+        input.value = b.label;
+        input.title = 'This label is written as the class label for every point inside this box on export.';
+        input.onclick = (e) => e.stopPropagation();
+        input.oninput = (e) => {
+          b.label = e.target.value || `Box_${b.id}`;
+          labelPart.textContent = b.label;
+          refreshBoxLabelSprite(b);
+        };
+        const assignBtn = document.createElement('button');
+        assignBtn.className = 'action-btn assign-label-btn';
+        assignBtn.textContent = '🏷️ Assign Label to Points Inside';
+        assignBtn.title = "Commits this box's label to the points currently inside it. Moving the box afterwards will not change already-assigned labels.";
+        assignBtn.onclick = (e) => {
+          e.stopPropagation();
+          assignLabelForBox(b);
+        };
+
+        labelGroup.appendChild(labelTag);
+        labelGroup.appendChild(input);
+        labelGroup.appendChild(assignBtn);
+
+        const glowGroup = document.createElement('div');
+        glowGroup.className = 'control-group';
+        const glowLabel = document.createElement('label');
+        glowLabel.textContent = 'Glow:';
+
+        const glowRow = document.createElement('div');
+        glowRow.className = 'glow-row';
+
+        const bulbBtn = document.createElement('button');
+        bulbBtn.className = `bulb-btn ${b.glowEnabled ? '' : 'bulb-off'}`;
+        bulbBtn.innerHTML = '💡';
+        bulbBtn.title = b.glowEnabled ? 'Disable glow for this box' : 'Enable glow for this box';
+        bulbBtn.onclick = (e) => {
+          e.stopPropagation();
+          b.glowEnabled = !b.glowEnabled;
+          bulbBtn.classList.toggle('bulb-off', !b.glowEnabled);
+          bulbBtn.title = b.glowEnabled ? 'Disable glow for this box' : 'Enable glow for this box';
+          computeAllGlowSelections();
+        };
+
+        const colorArrowBtn = document.createElement('button');
+        colorArrowBtn.type = 'button';
+        colorArrowBtn.className = 'color-arrow-btn';
+        colorArrowBtn.title = 'Pick glow color for this box';
+        colorArrowBtn.innerHTML = `<span class="swatch" style="background:${swatchCss(b.glowColor)}"></span><span class="arrow">▾</span>`;
+        colorArrowBtn.onclick = (e) => {
+          e.stopPropagation();
+          openColorPopover(colorArrowBtn, b.glowColor, (hex) => {
+            b.glowColor = hex;
+            colorArrowBtn.querySelector('.swatch').style.background = swatchCss(hex);
+          });
+        };
+
+        glowRow.appendChild(bulbBtn);
+        glowRow.appendChild(colorArrowBtn);
+        glowGroup.appendChild(glowLabel);
+        glowGroup.appendChild(glowRow);
+
+        // --- Transform: position (X, Y, Z) and rotation (Yaw, Pitch, Roll), two-way bound to the 3D box ---
+        function makeAxisField(labelText, initialValue, step, onCommit) {
+          const wrap = document.createElement('div');
+          const span = document.createElement('span');
+          span.textContent = labelText;
+          const fieldInput = document.createElement('input');
+          fieldInput.type = 'number';
+          fieldInput.step = step;
+          fieldInput.value = initialValue;
+          fieldInput.onclick = (e) => e.stopPropagation();
+          fieldInput.oninput = (e) => {
+            e.stopPropagation();
+            onCommit(parseFloat(e.target.value) || 0);
+          };
+          wrap.appendChild(span);
+          wrap.appendChild(fieldInput);
+          return fieldInput;
+        }
+
+        const applyPosition = () => {
+          b.group.position.set(parseFloat(inpX.value) || 0, parseFloat(inpY.value) || 0, parseFloat(inpZ.value) || 0);
+          computeAllGlowSelections();
+        };
+        const applyRotation = () => {
+          b.group.quaternion.copy(yprToQuaternion(parseFloat(inpYaw.value) || 0, parseFloat(inpPitch.value) || 0, parseFloat(inpRoll.value) || 0));
+          computeAllGlowSelections();
+        };
+
+        const posGroup = document.createElement('div');
+        posGroup.className = 'control-group';
+        const posLabel = document.createElement('label');
+        posLabel.textContent = 'Position (X, Y, Z):';
+        const posRow = document.createElement('div');
+        posRow.className = 'offset-inputs';
+        const inpX = makeAxisField('X', b.group.position.x.toFixed(2), 0.1, applyPosition);
+        const inpY = makeAxisField('Y', b.group.position.y.toFixed(2), 0.1, applyPosition);
+        const inpZ = makeAxisField('Z', b.group.position.z.toFixed(2), 0.1, applyPosition);
+        posRow.appendChild(inpX.parentElement);
+        posRow.appendChild(inpY.parentElement);
+        posRow.appendChild(inpZ.parentElement);
+        posGroup.appendChild(posLabel);
+        posGroup.appendChild(posRow);
+
+        const initialYPR = quaternionToYPR(b.group.quaternion);
+        const rotGroup = document.createElement('div');
+        rotGroup.className = 'control-group';
+        const rotLabel = document.createElement('label');
+        rotLabel.textContent = 'Rotation ° (Yaw, Pitch, Roll):';
+        const rotRow = document.createElement('div');
+        rotRow.className = 'offset-inputs';
+        const inpYaw = makeAxisField('Yaw', initialYPR.yaw.toFixed(1), 1, applyRotation);
+        const inpPitch = makeAxisField('Pit', initialYPR.pitch.toFixed(1), 1, applyRotation);
+        const inpRoll = makeAxisField('Rol', initialYPR.roll.toFixed(1), 1, applyRotation);
+        rotRow.appendChild(inpYaw.parentElement);
+        rotRow.appendChild(inpPitch.parentElement);
+        rotRow.appendChild(inpRoll.parentElement);
+        rotGroup.appendChild(rotLabel);
+        rotGroup.appendChild(rotRow);
+
+        b.transformInputs = { x: inpX, y: inpY, z: inpZ, yaw: inpYaw, pitch: inpPitch, roll: inpRoll };
+
+        body.appendChild(labelGroup);
+        body.appendChild(glowGroup);
+        body.appendChild(posGroup);
+        body.appendChild(rotGroup);
+
+        card.appendChild(header);
+        card.appendChild(body);
+        container.appendChild(card);
+      });
+    }
+
+    // Export System: Dual-File Output (Boxes + Points inside Boxes)
+    function downloadFile(content, filename, contentType) {
+      const a = document.createElement('a');
+      const blob = new Blob([content], { type: contentType });
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function csvQuote(text) {
+      return `"${String(text).replace(/"/g, '""')}"`;
+    }
+
+    function exportAnnotations() {
+      const filenamePrefix = document.getElementById('export-prefix-input').value.trim() || 'annotation';
+
+      // 1. Box-wise label file: one row per box with its full pose (position, size, rotation in radians).
+      let boxCsv = "frame_name,uid,label,x,y,z,l,w,h,rx_rad,ry_rad,rz_rad\n";
+      boxes.forEach(b => {
+        const pos = b.group.position;
+        const scale = b.group.scale;
+        const euler = new THREE.Euler().setFromQuaternion(b.group.quaternion, 'ZYX');
+
+        boxCsv += [
+          csvQuote(filenamePrefix),
+          b.id,
+          csvQuote(b.label),
+          pos.x, pos.y, pos.z,
+          scale.x, scale.y, scale.z,
+          euler.x, euler.y, euler.z
+        ].join(",") + "\n";
+      });
+      downloadFile(boxCsv, `${filenamePrefix}_box_labels.csv`, 'text/csv');
+
+      // 2. Point-wise label file: every point from every layer, labeled with whatever box's label
+      // was explicitly committed to it via "Assign Label to Points Inside" (-1 if never assigned).
+      // This is a persisted, per-point value — it does NOT reflect live box position, so moving a
+      // box around never changes an already-exported/assigned point's label.
+      const boxById = new Map(boxes.map(b => [b.id, b]));
+
+      let pointCsv = "x,y,z,label\n";
+      let labeledCount = 0;
+      let totalCount = 0;
+
+      for (const layer of Object.values(pointCloudLayers)) {
+        const data = layer.data;
+        const K = layer.K;
+
+        for (let i = 0; i < layer.N; i++) {
+          const px = data[i * K + 0];
+          const py = data[i * K + 1];
+          const pz = data[i * K + 2];
+
+          const assignedId = layer.pointBoxAssignment[i];
+          const assignedBox = assignedId === -1 ? null : boxById.get(assignedId);
+          const label = assignedBox ? csvQuote(assignedBox.label) : -1;
+
+          if (label !== -1) labeledCount++;
+          totalCount++;
+          pointCsv += `${px},${py},${pz},${label}\n`;
+        }
+      }
+      downloadFile(pointCsv, `${filenamePrefix}_point_labels.csv`, 'text/csv');
+
+      document.getElementById('info-box').innerText =
+        `💾 Exported ${boxes.length} box(es) & ${labeledCount}/${totalCount} labeled point(s) as ${filenamePrefix}_*`;
+    }
+
+    function buildBoxCard() {
+      const sidebar = document.getElementById('sidebar');
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title"><span class="arrow">▼</span> <span>📦 Bounding Boxes</span></div>
+        </div>
+        <div class="card-body">
+          <button class="action-btn" id="btn-add-box" title="Add New Box">➕ Add New Box</button>
+          <div class="box-dim-group">
+            <button class="sub-axis-btn" id="btn-dim-length" onclick="selectSizeAxis('length')" title="Length">↔ L</button>
+            <button class="sub-axis-btn" id="btn-dim-width" onclick="selectSizeAxis('width')" title="Width">↕ W</button>
+            <button class="sub-axis-btn" id="btn-dim-height" onclick="selectSizeAxis('height')" title="Height">⇕ H</button>
+          </div>
+          <div class="box-list-container" id="box-list-container"></div>
+          <div class="control-group export-group">
+            <label>Export Filename:</label>
+            <input type="text" id="export-prefix-input" value="frame_001_annotations">
+            <button class="action-btn export-btn" onclick="exportAnnotations()">💾 Export Box & Point Data</button>
+          </div>
+        </div>
+      `;
+
+      sidebar.appendChild(card);
+
+      const header = card.querySelector('.card-header');
+      const body = card.querySelector('.card-body');
+      header.onclick = () => {
+        const isCollapsed = body.classList.toggle('collapsed');
+        card.querySelector('.arrow').innerText = isCollapsed ? '▶' : '▼';
+      };
+
+      document.getElementById('btn-add-box').onclick = () => {
+        const activeB = getActiveBox();
+        const newPos = activeB ? activeB.group.position.clone().add(new THREE.Vector3(1, 1, 0)) : new THREE.Vector3(4, 0, 1.5);
+        createBoundingBox({ position: newPos });
+        if (!isBoxEditMode) toggleBoxEditMode();
+      };
+    }
+
+    // Pointer Operations for Bounding Boxes
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#sidebar')) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      prevMousePos.set(e.clientX, e.clientY);
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
+
+      const intersects = raycaster.intersectObjects(getRaycastableBoxFaceMeshes());
+      if (intersects.length > 0) {
+        const hitBox = boxes.find(b => b.facesMesh === intersects[0].object);
+        if (hitBox && hitBox.id !== activeBoxId) setActiveBox(hitBox.id);
+
+        const activeB = getActiveBox();
+        if (!activeB || !isBoxEditMode) return;
+
+        isDraggingBox = true;
+        glowSuspendedForDrag = true;
+        for (const name of Object.keys(pointCloudLayers)) restoreBaseColors(name);
+
+        if (e.button === 1) {
+          dragMode = 'translate';
+          dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), activeB.group.position);
+        } else {
+          selectedFaceNormal.copy(intersects[0].face.normal).applyQuaternion(activeB.group.quaternion).normalize();
+          if (activeSizeAxis && e.button === 0) dragMode = 'scale_axis';
+          else if (e.button === 0) dragMode = 'rotate';
+          else if (e.button === 2) dragMode = 'scale_right_click';
+        }
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      const activeB = getActiveBox();
+      if (!isDraggingBox || !activeB || !isBoxEditMode) return;
+
+      const deltaX = e.clientX - prevMousePos.x;
+      const deltaY = e.clientY - prevMousePos.y;
+      prevMousePos.set(e.clientX, e.clientY);
+
+      if (dragMode === 'translate') {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
+        if (raycaster.ray.intersectPlane(dragPlane, planeIntersect)) {
+          activeB.group.position.copy(planeIntersect);
+        }
+      } else if (dragMode === 'rotate') {
+        const rotSpeed = 0.008;
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        activeB.group.quaternion.premultiply(
+          new THREE.Quaternion().setFromAxisAngle(cameraUp, deltaX * rotSpeed)
+            .multiply(new THREE.Quaternion().setFromAxisAngle(cameraRight, deltaY * rotSpeed))
+        );
+      } else if (dragMode === 'scale_axis') {
+        const scaleChange = -deltaY * 0.015;
+        if (activeSizeAxis === 'length') activeB.group.scale.x = Math.max(0.2, activeB.group.scale.x + scaleChange);
+        else if (activeSizeAxis === 'width') activeB.group.scale.y = Math.max(0.2, activeB.group.scale.y + scaleChange);
+        else if (activeSizeAxis === 'height') activeB.group.scale.z = Math.max(0.2, activeB.group.scale.z + scaleChange);
+      } else if (dragMode === 'scale_right_click') {
+        const dragFactor = (deltaX - deltaY) * 0.01;
+        const absX = Math.abs(selectedFaceNormal.x);
+        const absY = Math.abs(selectedFaceNormal.y);
+        const absZ = Math.abs(selectedFaceNormal.z);
+
+        if (absX > absY && absX > absZ) activeB.group.scale.x = Math.max(0.2, activeB.group.scale.x + dragFactor);
+        else if (absY > absX && absY > absZ) activeB.group.scale.y = Math.max(0.2, activeB.group.scale.y + dragFactor);
+        else activeB.group.scale.z = Math.max(0.2, activeB.group.scale.z + dragFactor);
+      }
+
+      syncTransformInputs(activeB);
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (isDraggingBox) {
+        isDraggingBox = false;
+        dragMode = null;
+        glowSuspendedForDrag = false;
+        computeAllGlowSelections();
+      }
+    });
+    window.addEventListener('contextmenu', (e) => { if (isBoxEditMode) e.preventDefault(); });
+
+    // Double-click a box (face/edge/inside) to jump straight into Box Edit Mode on it.
+    // Double-click empty space while editing to drop back out.
+    window.addEventListener('dblclick', (e) => {
+      if (e.target.closest('#sidebar')) return;
+      if (boxes.length === 0) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
+      const intersects = raycaster.intersectObjects(getRaycastableBoxFaceMeshes());
+
+      if (intersects.length > 0) {
+        const hitBox = boxes.find(b => b.facesMesh === intersects[0].object);
+        if (hitBox && hitBox.id !== activeBoxId) setActiveBox(hitBox.id);
+        if (!isBoxEditMode) toggleBoxEditMode();
+      } else if (isBoxEditMode) {
+        toggleBoxEditMode();
+      }
+    });
+
+    // Grid Reference Controls
+    let gridHelper = null;
+    const gridConfig = { visible: true, cellSize: 1.0, totalExtent: 40.0, offsetX: 0.0, offsetY: 0.0, offsetZ: 0.0 };
+
+    function rebuildGrid() {
+      if (gridHelper) {
+        scene.remove(gridHelper);
+        gridHelper.geometry.dispose();
+        gridHelper.material.dispose();
+      }
+
+      const divisions = Math.round(gridConfig.totalExtent / gridConfig.cellSize);
+      gridHelper = new THREE.GridHelper(gridConfig.totalExtent, divisions, 0x00d2ff, 0x333333);
+      gridHelper.rotation.x = Math.PI / 2;
+      gridHelper.position.set(gridConfig.offsetX, gridConfig.offsetY, gridConfig.offsetZ);
+      gridHelper.visible = gridConfig.visible;
+      scene.add(gridHelper);
+    }
+
+    function buildGridCard() {
+      const sidebar = document.getElementById('sidebar');
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title"><span class="arrow">▼</span> <span>🌐 Reference Grid</span></div>
+          <button class="eye-btn" id="grid-eye-btn">👁️</button>
+        </div>
+        <div class="card-body">
+          <div class="control-group">
+            <label>Grid Size (Meters):</label>
+            <select id="grid-size-select">
+              <option value="0.5">0.5 m</option>
+              <option value="1.0" selected>1.0 m</option>
+              <option value="2.0">2.0 m</option>
+              <option value="5.0">5.0 m</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label>Grid Offset (m):</label>
+            <div class="offset-inputs">
+              <div><span>X</span><input type="number" id="grid-off-x" value="0" step="0.5"></div>
+              <div><span>Y</span><input type="number" id="grid-off-y" value="0" step="0.5"></div>
+              <div><span>Z</span><input type="number" id="grid-off-z" value="0" step="0.5"></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      sidebar.appendChild(card);
+
+      const header = card.querySelector('.card-header');
+      const body = card.querySelector('.card-body');
+      header.onclick = (e) => {
+        if (e.target.closest('#grid-eye-btn')) return;
+        const isCollapsed = body.classList.toggle('collapsed');
+        card.querySelector('.arrow').innerText = isCollapsed ? '▶' : '▼';
+      };
+
+      const eyeBtn = card.querySelector('#grid-eye-btn');
+      eyeBtn.onclick = () => {
+        gridConfig.visible = !gridConfig.visible;
+        if (gridHelper) gridHelper.visible = gridConfig.visible;
+        eyeBtn.innerHTML = gridConfig.visible ? '👁️' : '👁️‍🗨️';
+        eyeBtn.classList.toggle('hidden-layer', !gridConfig.visible);
+      };
+
+      card.querySelector('#grid-size-select').onchange = (e) => {
+        gridConfig.cellSize = parseFloat(e.target.value);
+        rebuildGrid();
+      };
+
+      card.querySelector('#grid-off-x').oninput = (e) => { gridConfig.offsetX = parseFloat(e.target.value) || 0; rebuildGrid(); };
+      card.querySelector('#grid-off-y').oninput = (e) => { gridConfig.offsetY = parseFloat(e.target.value) || 0; rebuildGrid(); };
+      card.querySelector('#grid-off-z').oninput = (e) => { gridConfig.offsetZ = parseFloat(e.target.value) || 0; rebuildGrid(); };
+
+      rebuildGrid();
+    }
+
+    // Scale / Measure Tool: click a start point then an end point on a point cloud to draw an
+    // arrow between them and report the x/y/z distance.
+    function buildMeasureCard() {
+      const sidebar = document.getElementById('sidebar');
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title"><span class="arrow">▼</span> <span>📏 Scale / Measure</span></div>
+        </div>
+        <div class="card-body">
+          <button class="action-btn" id="btn-start-measure">📐 Start Measuring</button>
+          <button class="action-btn" id="btn-clear-measure" style="display:none; margin-top:4px;">🗑️ Clear Measurement</button>
+          <div class="control-group measure-result" id="measure-result" style="display:none;">
+            <label>Distance:</label>
+            <div class="measure-row">&#916;X: <span id="measure-dx"></span> m</div>
+            <div class="measure-row">&#916;Y: <span id="measure-dy"></span> m</div>
+            <div class="measure-row">&#916;Z: <span id="measure-dz"></span> m</div>
+            <div class="measure-row measure-total">Total: <span id="measure-total"></span> m</div>
+          </div>
+        </div>
+      `;
+
+      sidebar.appendChild(card);
+
+      const header = card.querySelector('.card-header');
+      const body = card.querySelector('.card-body');
+      header.onclick = () => {
+        const isCollapsed = body.classList.toggle('collapsed');
+        card.querySelector('.arrow').innerText = isCollapsed ? '▶' : '▼';
+      };
+
+      const startBtn = card.querySelector('#btn-start-measure');
+      const clearBtn = card.querySelector('#btn-clear-measure');
+      const resultBox = card.querySelector('#measure-result');
+
+      startBtn.onclick = () => {
+        if (isBoxEditMode) toggleBoxEditMode();
+        isMeasureMode = true;
+        measureStartPoint = null;
+        measureStartMesh.visible = false;
+        measureEndMesh.visible = false;
+        clearMeasureArrow();
+        resultBox.style.display = 'none';
+        clearBtn.style.display = 'none';
+        startBtn.classList.add('active');
+        startBtn.innerText = '📐 Click a Start Point...';
+        document.getElementById('info-box').innerText = 'Measure: click a start point';
+      };
+
+      clearBtn.onclick = () => {
+        isMeasureMode = false;
+        measureStartPoint = null;
+        measureStartMesh.visible = false;
+        measureEndMesh.visible = false;
+        clearMeasureArrow();
+        resultBox.style.display = 'none';
+        clearBtn.style.display = 'none';
+        startBtn.classList.remove('active');
+        startBtn.innerText = '📐 Start Measuring';
+        document.getElementById('info-box').innerText = 'Click a point to inspect | Double-click a box to edit it';
+      };
+    }
+
+    // Ego Poses: a trajectory of 3D axis triads (red=X, green=Y, blue=Z), one per pose, joined
+    // by a line through their positions. Poses arrive as flat row-major 4x4 vehicle-to-world
+    // matrices (matching EgoOdometryLoader's T convention) and accumulate across calls — each
+    // add_ego_poses() call appends to the trajectory rather than replacing it, so a script can
+    // call it once per frame in a loop (like add_point_cloud) and watch the trajectory grow live.
+    //
+    // Odometry poses are usually in some large absolute/world coordinate system (e.g. x=389,
+    // y=107), while point clouds/boxes in this viewer live in a small vehicle-local frame near
+    // the origin. Plotted raw, the trajectory would render enormously far from everything else.
+    // So every incoming pose is stored RELATIVE to the very first pose ever added (T_rel =
+    // inv(T_first) @ T_i) — the trajectory always starts at the origin and grows from there in
+    // real-world meters, the same convention EgoOdometryLoader.motion_compensate_point_clouds()
+    // uses for compensating point clouds against a reference pose.
+    const egoPoses = {
+      names: [],
+      matrices: new Float32Array(0), // K*16 floats, row-major 4x4 per pose, relative to the first pose
+      K: 0,
+      axisLength: 1.0,
+      visible: true,
+      originInverse: null // THREE.Matrix4, inverse of the first pose added; null until then
+    };
+    let egoAxesLines = null;   // THREE.LineSegments: 3 colored axis segments per pose
+    let egoTrajLine = null;    // THREE.Line: polyline through every pose's origin
+
+    // flat[offset..offset+16) is a row-major 4x4; THREE.Matrix4.set() takes row-major arguments
+    // but stores them internally as column-major, so this round-trips correctly either way.
+    function rowMajorToMatrix4(flat, offset, out) {
+      out.set(
+        flat[offset + 0], flat[offset + 1], flat[offset + 2], flat[offset + 3],
+        flat[offset + 4], flat[offset + 5], flat[offset + 6], flat[offset + 7],
+        flat[offset + 8], flat[offset + 9], flat[offset + 10], flat[offset + 11],
+        flat[offset + 12], flat[offset + 13], flat[offset + 14], flat[offset + 15]
+      );
+      return out;
+    }
+
+    // Writes `mat` back out as a row-major 4x4 into `out` at `offset` (inverse of the above —
+    // THREE.Matrix4.elements is column-major, so row r / col c is elements[c*4 + r]).
+    function matrix4ToRowMajor(mat, out, offset) {
+      const e = mat.elements;
+      out[offset + 0] = e[0]; out[offset + 1] = e[4]; out[offset + 2] = e[8]; out[offset + 3] = e[12];
+      out[offset + 4] = e[1]; out[offset + 5] = e[5]; out[offset + 6] = e[9]; out[offset + 7] = e[13];
+      out[offset + 8] = e[2]; out[offset + 9] = e[6]; out[offset + 10] = e[10]; out[offset + 11] = e[14];
+      out[offset + 12] = e[3]; out[offset + 13] = e[7]; out[offset + 14] = e[11]; out[offset + 15] = e[15];
+    }
+
+    const _poseMat = new THREE.Matrix4();
+    const _poseRelMat = new THREE.Matrix4();
+
+    function appendEgoPoses(matricesFlatNew, namesNew, axisLength) {
+      const newK = namesNew.length;
+      const relativeFlat = new Float32Array(matricesFlatNew.length);
+
+      for (let i = 0; i < newK; i++) {
+        const off = i * 16;
+        rowMajorToMatrix4(matricesFlatNew, off, _poseMat);
+        if (!egoPoses.originInverse) {
+          egoPoses.originInverse = new THREE.Matrix4().copy(_poseMat).invert();
+        }
+        _poseRelMat.multiplyMatrices(egoPoses.originInverse, _poseMat);
+        matrix4ToRowMajor(_poseRelMat, relativeFlat, off);
+      }
+
+      const combined = new Float32Array(egoPoses.matrices.length + relativeFlat.length);
+      combined.set(egoPoses.matrices, 0);
+      combined.set(relativeFlat, egoPoses.matrices.length);
+      egoPoses.matrices = combined;
+      egoPoses.names = egoPoses.names.concat(namesNew);
+      egoPoses.K += newK;
+      if (axisLength) egoPoses.axisLength = axisLength;
+      rebuildEgoPoseVisuals();
+      updateEgoPoseCountUI();
+    }
+
+    function updateEgoPoseCountUI() {
+      const el = document.getElementById('ego-pose-count');
+      if (el) el.innerText = egoPoses.K;
+    }
+
+    function rebuildEgoPoseVisuals() {
+      if (egoAxesLines) {
+        scene.remove(egoAxesLines);
+        egoAxesLines.geometry.dispose();
+        egoAxesLines.material.dispose();
+        egoAxesLines = null;
+      }
+      if (egoTrajLine) {
+        scene.remove(egoTrajLine);
+        egoTrajLine.geometry.dispose();
+        egoTrajLine.material.dispose();
+        egoTrajLine = null;
+      }
+
+      const K = egoPoses.K;
+      if (K === 0) return;
+
+      const axisLen = egoPoses.axisLength;
+      const m = egoPoses.matrices;
+      const axesPositions = new Float32Array(K * 6 * 3);
+      const axesColors = new Float32Array(K * 6 * 3);
+      const trajPositions = new Float32Array(K * 3);
+
+      for (let i = 0; i < K; i++) {
+        const off = i * 16;
+        // Row-major 4x4: element (row r, col c) lives at off + r*4 + c. Translation is column 3
+        // of rows 0..2; the rotation matrix's columns 0/1/2 are the local x/y/z axis directions
+        // in world space (standard vehicle-to-world convention).
+        const ox = m[off + 3], oy = m[off + 7], oz = m[off + 11];
+        let xx = m[off + 0], xy = m[off + 4], xz = m[off + 8];
+        let yx = m[off + 1], yy = m[off + 5], yz = m[off + 9];
+        let zx = m[off + 2], zy = m[off + 6], zz = m[off + 10];
+
+        const xLen = Math.hypot(xx, xy, xz) || 1; xx /= xLen; xy /= xLen; xz /= xLen;
+        const yLen = Math.hypot(yx, yy, yz) || 1; yx /= yLen; yy /= yLen; yz /= yLen;
+        const zLen = Math.hypot(zx, zy, zz) || 1; zx /= zLen; zy /= zLen; zz /= zLen;
+
+        trajPositions[i * 3 + 0] = ox;
+        trajPositions[i * 3 + 1] = oy;
+        trajPositions[i * 3 + 2] = oz;
+
+        const base = i * 18; // 6 vertices * 3 floats per pose
+        axesPositions[base + 0] = ox; axesPositions[base + 1] = oy; axesPositions[base + 2] = oz;
+        axesPositions[base + 3] = ox + xx * axisLen; axesPositions[base + 4] = oy + xy * axisLen; axesPositions[base + 5] = oz + xz * axisLen;
+        axesPositions[base + 6] = ox; axesPositions[base + 7] = oy; axesPositions[base + 8] = oz;
+        axesPositions[base + 9] = ox + yx * axisLen; axesPositions[base + 10] = oy + yy * axisLen; axesPositions[base + 11] = oz + yz * axisLen;
+        axesPositions[base + 12] = ox; axesPositions[base + 13] = oy; axesPositions[base + 14] = oz;
+        axesPositions[base + 15] = ox + zx * axisLen; axesPositions[base + 16] = oy + zy * axisLen; axesPositions[base + 17] = oz + zz * axisLen;
+
+        // X=red, Y=green, Z=blue — matches the small orientation gizmo's axis colors.
+        axesColors[base + 0] = 1.0; axesColors[base + 1] = 0.2; axesColors[base + 2] = 0.2;
+        axesColors[base + 3] = 1.0; axesColors[base + 4] = 0.2; axesColors[base + 5] = 0.2;
+        axesColors[base + 6] = 0.2; axesColors[base + 7] = 1.0; axesColors[base + 8] = 0.2;
+        axesColors[base + 9] = 0.2; axesColors[base + 10] = 1.0; axesColors[base + 11] = 0.2;
+        axesColors[base + 12] = 0.2; axesColors[base + 13] = 0.53; axesColors[base + 14] = 1.0;
+        axesColors[base + 15] = 0.2; axesColors[base + 16] = 0.53; axesColors[base + 17] = 1.0;
+      }
+
+      const axesGeo = new THREE.BufferGeometry();
+      axesGeo.setAttribute('position', new THREE.BufferAttribute(axesPositions, 3));
+      axesGeo.setAttribute('color', new THREE.BufferAttribute(axesColors, 3));
+      egoAxesLines = new THREE.LineSegments(axesGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 }));
+      egoAxesLines.visible = egoPoses.visible;
+      scene.add(egoAxesLines);
+
+      const trajGeo = new THREE.BufferGeometry();
+      trajGeo.setAttribute('position', new THREE.BufferAttribute(trajPositions, 3));
+      egoTrajLine = new THREE.Line(trajGeo, new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.45 }));
+      egoTrajLine.visible = egoPoses.visible;
+      scene.add(egoTrajLine);
+    }
+
+    function buildEgoPoseCard() {
+      const sidebar = document.getElementById('sidebar');
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title"><span class="arrow">▼</span> <span>🧭 Ego Poses</span></div>
+          <button class="eye-btn" id="ego-eye-btn">👁️</button>
+        </div>
+        <div class="card-body">
+          <div class="control-group">
+            <label>Axis Length (m):</label>
+            <input type="number" id="ego-axis-length" value="1.0" step="0.1" min="0.1">
+          </div>
+          <div class="control-group">
+            <label>Trajectory Poses: <span id="ego-pose-count">0</span></label>
+          </div>
+        </div>
+      `;
+
+      sidebar.appendChild(card);
+
+      const header = card.querySelector('.card-header');
+      const body = card.querySelector('.card-body');
+      header.onclick = (e) => {
+        if (e.target.closest('#ego-eye-btn')) return;
+        const isCollapsed = body.classList.toggle('collapsed');
+        card.querySelector('.arrow').innerText = isCollapsed ? '▶' : '▼';
+      };
+
+      const eyeBtn = card.querySelector('#ego-eye-btn');
+      eyeBtn.onclick = () => {
+        egoPoses.visible = !egoPoses.visible;
+        if (egoAxesLines) egoAxesLines.visible = egoPoses.visible;
+        if (egoTrajLine) egoTrajLine.visible = egoPoses.visible;
+        eyeBtn.innerHTML = egoPoses.visible ? '👁️' : '👁️‍🗨️';
+        eyeBtn.classList.toggle('hidden-layer', !egoPoses.visible);
+      };
+
+      card.querySelector('#ego-axis-length').oninput = (e) => {
+        const v = parseFloat(e.target.value);
+        if (!Number.isNaN(v) && v > 0) {
+          egoPoses.axisLength = v;
+          rebuildEgoPoseVisuals();
+        }
+      };
+    }
+
+    // Orientation Gizmo Axes
+    const axesContainer = document.getElementById('axes-container');
+    const axesScene = new THREE.Scene();
+    const axesCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
+    axesCamera.position.set(0, 0, 2.5);
+
+    const axesRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    axesRenderer.setSize(120, 120);
+    axesContainer.appendChild(axesRenderer.domElement);
+
+    const axesGroup = new THREE.Group();
+
+    function createAxisLine(p1, p2, hexColor) {
+      const geom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const mat = new THREE.LineBasicMaterial({ color: hexColor, linewidth: 3 });
+      return new THREE.Line(geom, mat);
+    }
+
+    const axisLen = 0.7;
+    axesGroup.add(createAxisLine(new THREE.Vector3(0,0,0), new THREE.Vector3(axisLen, 0, 0), 0xff3333));
+    axesGroup.add(createAxisLine(new THREE.Vector3(0,0,0), new THREE.Vector3(0, axisLen, 0), 0x33ff33));
+    axesGroup.add(createAxisLine(new THREE.Vector3(0,0,0), new THREE.Vector3(0, 0, axisLen), 0x3388ff));
+
+    function createTextSprite(text, color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.font = 'Bold 34px monospace';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 32, 32);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(0.32, 0.32, 1);
+      return sprite;
+    }
+
+    const xLabel = createTextSprite('X', '#ff4444');
+    xLabel.position.set(0.85, 0, 0);
+    axesGroup.add(xLabel);
+
+    const yLabel = createTextSprite('Y', '#44ff44');
+    yLabel.position.set(0, 0.85, 0);
+    axesGroup.add(yLabel);
+
+    const zLabel = createTextSprite('Z', '#4488ff');
+    zLabel.position.set(0, 0, 0.85);
+    axesGroup.add(zLabel);
+
+    axesScene.add(axesGroup);
+
+    function updateAxes() {
+      const rotMatrix = new THREE.Matrix4().extractRotation(camera.matrixWorldInverse);
+      axesGroup.setRotationFromMatrix(rotMatrix);
+      axesRenderer.render(axesScene, axesCamera);
+    }
+
+    // Colormap & Point Cloud Construction
+    function getTurboColor(val) {
+      const t = Math.max(0, Math.min(1, val));
+      const r = 34.61 + t * (1172.23 - t * (3543.23 - t * (3248.81 - t * 1052.60)));
+      const g = 23.31 + t * (657.32 + t * (1205.81 - t * (2812.50 + t * 1018.19)));
+      const b = 138.51 + t * (1560.85 - t * (3750.62 - t * (1082.28 - t * 3708.20)));
+      return new THREE.Color(
+        Math.max(0, Math.min(255, r)) / 255,
+        Math.max(0, Math.min(255, g)) / 255,
+        Math.max(0, Math.min(255, b)) / 255
+      );
+    }
+
+    // Simple two-stop linear gradient: deep blue (low) -> hot pink (high).
+    const GRADIENT_LOW = { r: 0.05, g: 0.2, b: 1.0 };
+    const GRADIENT_HIGH = { r: 1.0, g: 0.15, b: 0.4 };
+    function getGradientColor(val) {
+      const t = Math.max(0, Math.min(1, val));
+      return new THREE.Color(
+        GRADIENT_LOW.r + (GRADIENT_HIGH.r - GRADIENT_LOW.r) * t,
+        GRADIENT_LOW.g + (GRADIENT_HIGH.g - GRADIENT_LOW.g) * t,
+        GRADIENT_LOW.b + (GRADIENT_HIGH.b - GRADIENT_LOW.b) * t
+      );
+    }
+
+    // Full-spectrum rainbow: blue/violet (low) sweeping through green/yellow to red (high).
+    function getRainbowColor(val) {
+      const t = Math.max(0, Math.min(1, val));
+      const color = new THREE.Color();
+      color.setHSL(0.75 * (1 - t), 1.0, 0.5);
+      return color;
+    }
+
+    const COLORMAPS = {
+      turbo: getTurboColor,
+      gradient: getGradientColor,
+      rainbow: getRainbowColor
+    };
+
+    // `flatData` is a flat Float32Array of N*K values, row-major (point i, channel k -> flatData[i*K+k]).
+    // Using one flat typed array (instead of an array of N arrays) is what keeps this fast at
+    // hundreds of thousands of points: no per-point JS object/array overhead, and it's exactly the
+    // layout the binary wire payload (base64 Float32 bytes) decodes into directly.
+    // Tears down a layer's 3D mesh and sidebar card. Used before re-adding a layer with the same
+    // name, so calling add_point_cloud() again for a name you've already used *replaces* it
+    // in place, instead of silently leaving the old mesh (and a duplicate sidebar card) behind.
+    function removePointCloud(name) {
+      const layer = pointCloudLayers[name];
+      if (!layer) return;
+
+      scene.remove(layer.mesh);
+      layer.mesh.geometry.dispose();
+      layer.mesh.material.dispose();
+      delete pointCloudLayers[name];
+
+      const card = document.querySelector(
+        `#point-cloud-list-container [data-layer-name="${CSS.escape(name)}"]`
+      );
+      if (card) card.remove();
+    }
+
+    function addPointCloud(name, flatData, N, K, initialCol = 3, initialPointSize = 0.08, fieldNames = null) {
+      if (pointCloudLayers[name]) removePointCloud(name);
+
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(N * 3);
+      const colors = new Float32Array(N * 3);
+      const originalColors = new Float32Array(N * 3);
+
+      for (let i = 0; i < N; i++) {
+        positions[i * 3 + 0] = flatData[i * K + 0];
+        positions[i * 3 + 1] = flatData[i * K + 1];
+        positions[i * 3 + 2] = flatData[i * K + 2];
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: initialPointSize,
+        vertexColors: true,
+        sizeAttenuation: true,
+        map: sphereMap,
+        transparent: true,
+        alphaTest: 0.2
+      });
+
+      const pointsMesh = new THREE.Points(geometry, material);
+      // One small draw call either way, so just skip frustum culling for point clouds entirely.
+      pointsMesh.frustumCulled = false;
+      scene.add(pointsMesh);
+
+      pointCloudLayers[name] = {
+        mesh: pointsMesh,
+        data: flatData,
+        N: N,
+        K: K,
+        activeCol: initialCol,
+        colormap: 'turbo',
+        fieldNames: (fieldNames && fieldNames.length === K) ? fieldNames : null,
+        originalColors: originalColors,
+        // Persistent, per-point committed label (a box's uid, or -1 = unlabeled). Only ever written
+        // by assignLabelForBox() — dragging/rotating/scaling a box never touches this.
+        pointBoxAssignment: new Int32Array(N).fill(-1),
+        // Display-only filter: points whose value in `activeCol` falls outside [filterMin,
+        // filterMax] are recolored to match the scene background (see applyPointFilter).
+        // null = no bound. filterHidden is a parallel Uint8Array(N) of 0/1, lazily created by
+        // applyPointFilter and consulted by anything that should ignore filtered-out points
+        // (glow selection, box point-count/label-assignment, click-to-inspect raycasting).
+        filterMin: null,
+        filterMax: null,
+        filterHidden: null
+      };
+
+      updateChannelColor(name, initialCol);
+      buildSidebarCard(name, K, initialCol, initialPointSize, pointCloudLayers[name].fieldNames);
+      computeAllGlowSelections();
+    }
+
+    function updateChannelColor(name, colIndex) {
+      const layer = pointCloudLayers[name];
+      layer.activeCol = colIndex;
+
+      const N = layer.N;
+      const K = layer.K;
+      const data = layer.data;
+      const colors = layer.mesh.geometry.attributes.color.array;
+      const orig = layer.originalColors;
+      const colorFn = COLORMAPS[layer.colormap] || getTurboColor;
+
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < N; i++) {
+        const v = data[i * K + colIndex];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const range = (max - min) || 1.0;
+
+      for (let i = 0; i < N; i++) {
+        const normVal = (data[i * K + colIndex] - min) / range;
+        const c = colorFn(normVal);
+        colors[i * 3 + 0] = c.r;
+        colors[i * 3 + 1] = c.g;
+        colors[i * 3 + 2] = c.b;
+
+        orig[i * 3 + 0] = c.r;
+        orig[i * 3 + 1] = c.g;
+        orig[i * 3 + 2] = c.b;
+      }
+
+      layer.mesh.geometry.attributes.color.needsUpdate = true;
+    }
+
+    // Recomputes layer.filterHidden for points whose value in the layer's currently-selected
+    // color channel falls outside [filterMin, filterMax] (either bound may be null, meaning
+    // unbounded on that side), then repaints so hidden points blend into the background —
+    // geometry/position and point count are untouched, so this doesn't disturb click-to-inspect
+    // indices, CSV export, or anything else keyed by index into the original data.
+    function applyPointFilter(name) {
+      const layer = pointCloudLayers[name];
+      const { data, K, N, activeCol, filterMin, filterMax } = layer;
+      if (!layer.filterHidden || layer.filterHidden.length !== N) {
+        layer.filterHidden = new Uint8Array(N);
+      }
+      const hidden = layer.filterHidden;
+      const hasMin = filterMin !== null && !Number.isNaN(filterMin);
+      const hasMax = filterMax !== null && !Number.isNaN(filterMax);
+
+      for (let i = 0; i < N; i++) {
+        const v = data[i * K + activeCol];
+        hidden[i] = (hasMin && v < filterMin) || (hasMax && v > filterMax) ? 1 : 0;
+      }
+
+      restoreBaseColors(name);
+    }
+
+    function setMarkerType(name, type) {
+      const mat = pointCloudLayers[name].mesh.material;
+      if (type === 'sphere') {
+        mat.map = sphereMap;
+        mat.transparent = true;
+      } else if (type === 'circle') {
+        mat.map = circleMap;
+        mat.transparent = true;
+      } else if (type === 'cube') {
+        mat.map = null;
+        mat.transparent = false;
+      }
+      mat.needsUpdate = true;
+    }
+
+    // Parent "Point Clouds" card: every layer's own controls live inside this single scrollable
+    // list instead of each getting a top-level sidebar card, so adding many layers/frames doesn't
+    // flood the whole sidebar.
+    function buildPointCloudsCard() {
+      const sidebar = document.getElementById('sidebar');
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title"><span class="arrow">▼</span> <span>📡 Point Clouds</span></div>
+          <button class="eye-btn" id="pc-master-eye-btn" title="Show/hide all point clouds at once">👁️</button>
+        </div>
+        <div class="card-body">
+          <div class="point-cloud-list-container" id="point-cloud-list-container"></div>
+        </div>
+      `;
+
+      sidebar.appendChild(card);
+
+      const header = card.querySelector('.card-header');
+      const body = card.querySelector('.card-body');
+      header.onclick = (e) => {
+        if (e.target.closest('#pc-master-eye-btn')) return;
+        const isCollapsed = body.classList.toggle('collapsed');
+        card.querySelector('.arrow').innerText = isCollapsed ? '▶' : '▼';
+      };
+
+      // Master toggle: shows/hides every layer at once (and keeps each layer's own eye icon in
+      // sync), so with many layers you can hide them all and re-enable just a few individually
+      // from their own sub-cards, instead of clicking each one off by hand.
+      let pcMasterVisible = true;
+      const masterEyeBtn = card.querySelector('#pc-master-eye-btn');
+      masterEyeBtn.onclick = () => {
+        pcMasterVisible = !pcMasterVisible;
+        document.querySelectorAll('#point-cloud-list-container .box-card').forEach(layerCard => {
+          const layer = pointCloudLayers[layerCard.dataset.layerName];
+          if (!layer) return;
+          layer.mesh.visible = pcMasterVisible;
+          const eyeBtn = layerCard.querySelector('.pc-eye-btn');
+          if (eyeBtn) {
+            eyeBtn.innerHTML = pcMasterVisible ? '👁️' : '👁️‍🗨️';
+            eyeBtn.classList.toggle('hidden-layer', !pcMasterVisible);
+          }
+        });
+        masterEyeBtn.innerHTML = pcMasterVisible ? '👁️' : '👁️‍🗨️';
+        masterEyeBtn.classList.toggle('hidden-layer', !pcMasterVisible);
+        computeAllGlowSelections();
+      };
+    }
+
+    function buildSidebarCard(name, K, initialCol, initialSize, fieldNames = null) {
+      const container = document.getElementById('point-cloud-list-container');
+      const card = document.createElement('div');
+      card.className = 'box-card';
+      card.dataset.layerName = name;
+
+      let selectOptions = '';
+      for (let k = 0; k < K; k++) {
+        let labelName;
+        if (fieldNames && fieldNames[k]) labelName = fieldNames[k];
+        else if (k === 0) labelName = 'X (Forward)';
+        else if (k === 1) labelName = 'Y (Left)';
+        else if (k === 2) labelName = 'Z (Up)';
+        else labelName = `Feature Channel ${k}`;
+        selectOptions += `<option value="${k}" ${k === initialCol ? 'selected' : ''}>${labelName}</option>`;
+      }
+
+      card.innerHTML = `
+        <div class="box-card-header">
+          <span class="box-card-arrow">▶</span>
+          <span class="pc-card-title">${name}</span>
+          <button class="eye-btn pc-eye-btn">👁️</button>
+        </div>
+        <div class="box-card-body collapsed">
+          <div class="control-group">
+            <label>Marker Type:</label>
+            <select class="marker-select">
+              <option value="sphere" selected>Sphere</option>
+              <option value="cube">Cube</option>
+              <option value="circle">Circle</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label>Color By Channel:</label>
+            <select class="channel-select">${selectOptions}</select>
+          </div>
+          <div class="control-group">
+            <label>Colormap:</label>
+            <select class="colormap-select">
+              <option value="turbo" selected>Turbo</option>
+              <option value="gradient">Gradient</option>
+              <option value="rainbow">Rainbow</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label>Point Size:</label>
+            <input type="range" class="size-range" min="0.01" max="0.3" step="0.01" value="${initialSize}">
+          </div>
+          <div class="control-group">
+            <label>Filter (on the color channel above):</label>
+            <div class="offset-inputs">
+              <div><span>Min</span><input type="number" class="filter-min-input" placeholder="none" step="any"></div>
+              <div><span>Max</span><input type="number" class="filter-max-input" placeholder="none" step="any"></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.appendChild(card);
+
+      const header = card.querySelector('.box-card-header');
+      const body = card.querySelector('.box-card-body');
+      const arrow = card.querySelector('.box-card-arrow');
+      header.onclick = (e) => {
+        if (e.target.closest('.pc-eye-btn')) return;
+        const isCollapsed = body.classList.toggle('collapsed');
+        arrow.innerText = isCollapsed ? '▶' : '▼';
+      };
+
+      const eyeBtn = card.querySelector('.pc-eye-btn');
+      eyeBtn.onclick = () => {
+        const mesh = pointCloudLayers[name].mesh;
+        mesh.visible = !mesh.visible;
+        eyeBtn.innerHTML = mesh.visible ? '👁️' : '👁️‍🗨️';
+        eyeBtn.classList.toggle('hidden-layer', !mesh.visible);
+        computeAllGlowSelections();
+      };
+
+      card.querySelector('.marker-select').onchange = (e) => setMarkerType(name, e.target.value);
+      card.querySelector('.channel-select').onchange = (e) => {
+        updateChannelColor(name, parseInt(e.target.value));
+        // The filter is defined on "the currently selected color channel", so switching channels
+        // re-evaluates the same min/max bounds against the newly-selected channel's values.
+        applyPointFilter(name);
+        computeAllGlowSelections();
+      };
+      card.querySelector('.colormap-select').onchange = (e) => {
+        pointCloudLayers[name].colormap = e.target.value;
+        updateChannelColor(name, pointCloudLayers[name].activeCol);
+        computeAllGlowSelections();
+      };
+      card.querySelector('.size-range').oninput = (e) => {
+        pointCloudLayers[name].mesh.material.size = parseFloat(e.target.value);
+      };
+
+      card.querySelector('.filter-min-input').oninput = (e) => {
+        const v = e.target.value.trim();
+        pointCloudLayers[name].filterMin = v === '' ? null : parseFloat(v);
+        applyPointFilter(name);
+        computeAllGlowSelections();
+      };
+      card.querySelector('.filter-max-input').oninput = (e) => {
+        const v = e.target.value.trim();
+        pointCloudLayers[name].filterMax = v === '' ? null : parseFloat(v);
+        applyPointFilter(name);
+        computeAllGlowSelections();
+      };
+    }
+
+    // Point Inspection via Raycasting
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Points.threshold = 0.15;
+    const mouse = new THREE.Vector2();
+
+    window.addEventListener('pointerdown', (event) => {
+      if (isBoxEditMode || event.target.closest('#sidebar')) return;
+
+      const pickRect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - pickRect.left) / pickRect.width) * 2 - 1;
+      mouse.y = -((event.clientY - pickRect.top) / pickRect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+
+      const targetMeshes = Object.values(pointCloudLayers)
+        .filter(l => l.mesh.visible)
+        .map(l => l.mesh);
+
+      const intersects = raycaster.intersectObjects(targetMeshes);
+
+      // Points hidden by the Min/Max filter are still real vertices (just recolored to blend
+      // into the background), so skip past any of them to the first genuinely visible hit.
+      let hit = null;
+      for (const cand of intersects) {
+        const candLayer = Object.values(pointCloudLayers).find(l => l.mesh === cand.object);
+        if (candLayer && candLayer.filterHidden && candLayer.filterHidden[cand.index]) continue;
+        hit = cand;
+        break;
+      }
+      if (!hit) return;
+
+      const pointIdx = hit.index;
+      const meshHit = hit.object;
+
+      const pos = meshHit.geometry.attributes.position;
+      const pickedPt = new THREE.Vector3(pos.getX(pointIdx), pos.getY(pointIdx), pos.getZ(pointIdx));
+
+      if (isMeasureMode) {
+        if (!measureStartPoint) {
+          // First click of the pair: drop the start marker and wait for the end point.
+          measureStartPoint = pickedPt.clone();
+          measureStartMesh.position.copy(pickedPt);
+          measureStartMesh.visible = true;
+          measureEndMesh.visible = false;
+          clearMeasureArrow();
+          document.getElementById('info-box').innerText = 'Measure: click an end point';
+        } else {
+          // Second click: drop the end marker, draw the arrow, and report the x/y/z distance.
+          measureEndMesh.position.copy(pickedPt);
+          measureEndMesh.visible = true;
+          drawMeasureArrow(measureStartPoint, pickedPt);
+
+          const dx = Math.abs(pickedPt.x - measureStartPoint.x);
+          const dy = Math.abs(pickedPt.y - measureStartPoint.y);
+          const dz = Math.abs(pickedPt.z - measureStartPoint.z);
+          const total = measureStartPoint.distanceTo(pickedPt);
+
+          document.getElementById('measure-dx').innerText = dx.toFixed(3);
+          document.getElementById('measure-dy').innerText = dy.toFixed(3);
+          document.getElementById('measure-dz').innerText = dz.toFixed(3);
+          document.getElementById('measure-total').innerText = total.toFixed(3);
+          document.getElementById('measure-result').style.display = 'flex';
+          document.getElementById('btn-clear-measure').style.display = 'block';
+
+          const startBtn = document.getElementById('btn-start-measure');
+          startBtn.classList.remove('active');
+          startBtn.innerText = '📐 Start Measuring';
+
+          document.getElementById('info-box').innerText =
+            `Distance: ΔX ${dx.toFixed(3)}  ΔY ${dy.toFixed(3)}  ΔZ ${dz.toFixed(3)}  Total ${total.toFixed(3)}`;
+
+          isMeasureMode = false;
+          measureStartPoint = null;
+        }
+        return;
+      }
+
+      let cloudName = 'Unknown Layer';
+      let hitLayer = null;
+      for (const [key, val] of Object.entries(pointCloudLayers)) {
+        if (val.mesh === meshHit) {
+          cloudName = key;
+          hitLayer = val;
+        }
+      }
+
+      highlightMesh.position.copy(pickedPt);
+      highlightMesh.visible = true;
+
+      let infoText = `${cloudName} | Point #${pointIdx}`;
+      if (hitLayer) {
+        // Show every feature channel for this point, not just X/Y/Z — using the layer's own
+        // field names when available (falls back to X/Y/Z + generic "Feature k" labels).
+        const { data, K, fieldNames } = hitLayer;
+        const parts = [];
+        for (let k = 0; k < K; k++) {
+          let label;
+          if (fieldNames && fieldNames[k]) label = fieldNames[k];
+          else if (k === 0) label = 'X';
+          else if (k === 1) label = 'Y';
+          else if (k === 2) label = 'Z';
+          else label = `Feature ${k}`;
+          parts.push(`${label}: ${data[pointIdx * K + k].toFixed(3)}`);
+        }
+        infoText += ` | ${parts.join('  ')}`;
+      }
+      document.getElementById('info-box').innerText = infoText;
+    });
+
+    // Fast HSL -> RGB (avoids allocating a THREE.Color per point in the rainbow glow loop below).
+    // Writes into `out` ([r,g,b], each 0..1) and returns it.
+    function hslToRgb(h, s, l, out) {
+      h = ((h % 1) + 1) % 1;
+      if (s === 0) {
+        out[0] = out[1] = out[2] = l;
+        return out;
+      }
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      out[0] = hue2rgb(p, q, h + 1 / 3);
+      out[1] = hue2rgb(p, q, h);
+      out[2] = hue2rgb(p, q, h - 1 / 3);
+      return out;
+    }
+    const _rainbowRgb = [0, 0, 0];
+
+    // Main Render Loop & Pulse Selection
+    function animate(time) {
+      requestAnimationFrame(animate);
+
+      if (controls.enabled) controls.update();
+
+      if (boxes.length > 0) {
+        scene.updateMatrixWorld(true);
+        updateBoxLabelPositions();
+      }
+
+      // Dynamic Glow Pulse for Points Inside Every Box that has Glow Enabled (each in its own color)
+      // Paused entirely while a box is being dragged — see glowSuspendedForDrag above.
+      if (!glowSuspendedForDrag && boxGlowSelections.length > 0) {
+        const pulse = (Math.sin(time * 0.008) + 1) / 2; // Smooth 0..1 oscillator
+        const brightness = 0.5 + 0.5 * pulse; // pulses the chosen color between dim and full brightness
+        const touchedLayers = new Set();
+
+        for (const entry of boxGlowSelections) {
+          const box = boxes.find(b => b.id === entry.boxId);
+          if (!box || !box.glowEnabled) continue;
+
+          const isRainbow = box.glowColor === 'rainbow';
+          let r, g, bch;
+          if (!isRainbow) {
+            const c = new THREE.Color(box.glowColor);
+            r = c.r * brightness; g = c.g * brightness; bch = c.b * brightness;
+          }
+
+          for (const [name, indices] of Object.entries(entry.byLayer)) {
+            const layer = pointCloudLayers[name];
+            if (!layer || !layer.mesh.visible) continue;
+
+            const colors = layer.mesh.geometry.attributes.color.array;
+
+            if (isRainbow) {
+              // Liquid-glass rainbow: hue flows across the selected points based on their own
+              // position (so nearby points shift together, like color moving through glass)
+              // plus time (so the whole thing flows/animates); lightness/saturation pulse with
+              // the same glow oscillator for a shimmering, glassy brightness swing.
+              const { data, K } = layer;
+              const lightness = 0.38 + 0.3 * pulse;
+              const saturation = 0.95 - 0.25 * pulse;
+              for (const i of indices) {
+                const i3 = i * 3;
+                const spatialPhase = (data[i * K + 0] + data[i * K + 1] + data[i * K + 2]) * 0.12;
+                const hue = time * 0.00018 + spatialPhase;
+                hslToRgb(hue, saturation, lightness, _rainbowRgb);
+                colors[i3 + 0] = _rainbowRgb[0];
+                colors[i3 + 1] = _rainbowRgb[1];
+                colors[i3 + 2] = _rainbowRgb[2];
+              }
+            } else {
+              for (const i of indices) {
+                const i3 = i * 3;
+                colors[i3 + 0] = r;
+                colors[i3 + 1] = g;
+                colors[i3 + 2] = bch;
+              }
+            }
+            touchedLayers.add(name);
+          }
+        }
+
+        touchedLayers.forEach(name => {
+          pointCloudLayers[name].mesh.geometry.attributes.color.needsUpdate = true;
+        });
+      }
+
+      renderer.render(scene, camera);
+      updateAxes();
+    }
+
+    // Shared by window resizes and by dragging the sidebar resizer — both change how much
+    // room the canvas has, so both need to re-fit the camera/renderer to it.
+    function handleViewportResize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w === 0 || h === 0) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+    window.addEventListener('resize', handleViewportResize);
+
+    // Draggable divider between the 3D view and the sidebar.
+    (function setupResizer() {
+      const resizer = document.getElementById('resizer');
+      const sidebarEl = document.getElementById('sidebar');
+      let isResizing = false;
+
+      resizer.addEventListener('pointerdown', (e) => {
+        isResizing = true;
+        resizer.classList.add('resizing');
+        resizer.setPointerCapture(e.pointerId);
+      });
+
+      resizer.addEventListener('pointermove', (e) => {
+        if (!isResizing) return;
+        const layoutRect = document.getElementById('app-layout').getBoundingClientRect();
+        const newWidth = layoutRect.right - e.clientX;
+        const minWidth = parseFloat(getComputedStyle(sidebarEl).minWidth) || 260;
+        const maxWidth = layoutRect.width * 0.7;
+        sidebarEl.style.flexBasis = `${Math.max(minWidth, Math.min(maxWidth, newWidth))}px`;
+        handleViewportResize();
+      });
+
+      const stopResizing = () => {
+        isResizing = false;
+        resizer.classList.remove('resizing');
+      };
+      resizer.addEventListener('pointerup', stopResizing);
+      resizer.addEventListener('pointercancel', stopResizing);
+    })();
+
+    // Fully collapses the sidebar (and its resizer), leaving just this one toggle button —
+    // which, since it's pinned to the canvas's top-right corner, sits right at the panel's
+    // top-left edge when open, and at the viewer's top-right corner once the panel is gone.
+    (function setupPanelToggle() {
+      const toggleBtn = document.getElementById('panel-toggle-btn');
+      const appLayout = document.getElementById('app-layout');
+      let collapsed = false;
+
+      toggleBtn.onclick = () => {
+        collapsed = !collapsed;
+        appLayout.classList.toggle('sidebar-collapsed', collapsed);
+        toggleBtn.title = collapsed ? 'Expand panel' : 'Collapse panel';
+        requestAnimationFrame(handleViewportResize);
+      };
+    })();
+
+    // Help popover: lists the camera/box/measure controls, opened via the "?" button next to
+    // the app logo. Closes on its own close button or a click anywhere outside it.
+    (function setupHelpPanel() {
+      const helpBtn = document.getElementById('help-btn');
+      const helpPanel = document.getElementById('help-panel');
+      const closeBtn = document.getElementById('help-panel-close');
+
+      helpBtn.onclick = (e) => {
+        e.stopPropagation();
+        helpPanel.hidden = !helpPanel.hidden;
+      };
+      closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        helpPanel.hidden = true;
+      };
+      helpPanel.onclick = (e) => e.stopPropagation();
+      document.addEventListener('click', () => { helpPanel.hidden = true; });
+    })();
+
+    // --- Data loading: static export payload, live server, or (neither) a standalone demo ---
+
+    function decodeFloat32Base64(b64) {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Float32Array(bytes.buffer);
+    }
+
+    // Baked by export_html() for a static, offline, single-file export.
+    function loadBakedPayload() {
+      pointCloudDataList.forEach(item => {
+        const flat = decodeFloat32Base64(item.dataB64);
+        addPointCloud(item.name, flat, item.n, item.k, item.initialCol, item.initialPointSize, item.fieldNames);
+      });
+
+      if (initialBoxDataList && initialBoxDataList.length > 0) {
+        loadInitialBoxes(initialBoxDataList);
+      } else {
+        createBoundingBox();
+      }
+
+      if (egoPoseDataList) {
+        egoPoseDataList.forEach(chunk => {
+          const flat = decodeFloat32Base64(chunk.matricesB64);
+          appendEgoPoses(flat, chunk.names, chunk.axisLength);
+        });
+      }
+    }
+
+    // No Python data at all (the raw template opened directly) — just show something.
+    function loadStandaloneDemo() {
+      function generateStandaloneTestCloud(count, channels, offset) {
+        const flat = new Float32Array(count * channels);
+        for (let i = 0; i < count; i++) {
+          const x = Math.random() * 8 + 0.5 + offset[0];
+          const y = (Math.random() - 0.5) * 6 + offset[1];
+          const z = (Math.random() - 0.5) * 3 + offset[2];
+          flat[i * channels + 0] = x;
+          flat[i * channels + 1] = y;
+          flat[i * channels + 2] = z;
+          for (let k = 3; k < channels; k++) {
+            if (k === 3) flat[i * channels + k] = Math.sqrt(x * x + y * y + z * z);
+            else if (k === 4) flat[i * channels + k] = Math.random() * 255;
+            else flat[i * channels + k] = Math.sin(x * k) * Math.cos(y * k);
+          }
+        }
+        return flat;
+      }
+
+      addPointCloud("LiDAR Cloud A", generateStandaloneTestCloud(12000, 6, [0, 0, 0]), 12000, 6, 3, 0.08,
+        ['X', 'Y', 'Z', 'Range', 'Intensity', 'Ripple']);
+      addPointCloud("Radar Cloud B", generateStandaloneTestCloud(6000, 5, [2.0, 1.5, 0.5]), 6000, 5, 3, 0.10,
+        ['X', 'Y', 'Z', 'Range', 'Doppler']);
+      createBoundingBox();
+    }
+
+    // Applies one recorded server event (from either a /poll response or the fallback baked
+    // payload) to the live scene.
+    function applyServerMessage(msg) {
+      if (msg.type === 'add_point_cloud') {
+        const flat = decodeFloat32Base64(msg.dataB64);
+        addPointCloud(msg.name, flat, msg.n, msg.k, msg.initialCol, msg.initialPointSize, msg.fieldNames);
+      } else if (msg.type === 'add_boxes') {
+        loadInitialBoxes(msg.boxes);
+      } else if (msg.type === 'select_box') {
+        const box = boxes.find(b => b.id === msg.id);
+        if (box) {
+          box.glowColor = msg.glowColor;
+          renderBoxCardList();
+          computeAllGlowSelections();
+        }
+      } else if (msg.type === 'add_ego_poses') {
+        const flat = decodeFloat32Base64(msg.matricesB64);
+        appendEgoPoses(flat, msg.names, msg.axisLength);
+      }
+    }
+
+    // Live mode: the page is being served by a CloudViewPy local server rather than opened as a
+    // bare file. Polls a plain request/response endpoint every ~1.5s for anything new instead of
+    // holding a long-lived streaming connection open — deliberately, since a persistent connection
+    // (Server-Sent Events, WebSocket, etc.) is exactly the kind of thing corporate proxies,
+    // antivirus, and some browser extensions silently break, especially on localhost. A short
+    // poll is a plain HTTP request each time, so there's nothing long-lived to interfere with.
+    // Applying new events incrementally (never a page reload) also means existing layers keep
+    // whatever colormap/point-size/etc. you've already set on them.
+    function startPolling() {
+      document.getElementById('info-box').innerText = 'Connecting to CloudView server...';
+      let appliedCount = 0;
+      let historyDone = false;
+      let fellBack = false;
+
+      const fallBackToDemo = () => {
+        if (historyDone || fellBack) return;
+        fellBack = true;
+        loadStandaloneDemo();
+      };
+
+      // If nothing answers within a couple seconds (no CloudViewPy server behind this page),
+      // stop waiting and show the standalone demo instead.
+      const fallbackTimer = setTimeout(fallBackToDemo, 2500);
+
+      async function poll() {
+        try {
+          const resp = await fetch(`/poll?since=${appliedCount}`, { cache: 'no-store' });
+          const data = await resp.json();
+
+          for (const line of data.events) {
+            applyServerMessage(JSON.parse(line));
+          }
+          appliedCount = data.total;
+
+          if (!historyDone) {
+            historyDone = true;
+            clearTimeout(fallbackTimer);
+            if (boxes.length === 0) createBoundingBox();
+            document.getElementById('info-box').innerText = 'Click a point to inspect | Double-click a box to edit it';
+          }
+        } catch (err) {
+          if (!historyDone && !fellBack) document.getElementById('info-box').innerText = 'Waiting for CloudView server...';
+        } finally {
+          // Once we've fallen back to the standalone demo (no CloudViewPy server behind this
+          // page), stop polling entirely — otherwise every failed fetch keeps re-stomping the
+          // info-box text (e.g. "Waiting for CloudView server...") over whatever the demo UI,
+          // like point-click inspection, just set it to.
+          if (!fellBack) setTimeout(poll, 1500);
+        }
+      }
+
+      poll();
+    }
+
+    // Initialization Sequence
+    buildBoxCard();
+    buildGridCard();
+    buildMeasureCard();
+    buildEgoPoseCard();
+    buildPointCloudsCard();
+
+    // A static export (export_html()) always bakes real payload data — use it unconditionally,
+    // regardless of how the file happens to be opened/served. Otherwise, try polling a live
+    // CloudViewPy server; startPolling() itself falls back to the standalone demo if none answers.
+    if (pointCloudDataList) {
+      loadBakedPayload();
+    } else {
+      startPolling();
+    }
+
+    animate(0);
+  </script>
+</body>
+</html>
